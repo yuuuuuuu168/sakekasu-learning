@@ -61,6 +61,9 @@ export class AuthStack extends Stack {
       accessTokenValidity: Duration.hours(1),
       idTokenValidity: Duration.hours(1),
       refreshTokenValidity: Duration.days(30),
+      // ログイン途中（パスワード変更・認証アプリの登録）のセッションの有効期限。
+      // 既定の3分では、認証アプリを入れて QR を読み取るまでに切れやすいため上限の15分にする
+      authSessionValidity: Duration.minutes(15),
       enableTokenRevocation: true,
     });
 

@@ -50,6 +50,7 @@ const TOTP_ISSUER = 'sakekasu learning';
 
 const ERROR_MESSAGES: Record<string, string> = {
   NotAuthorizedException: 'メールアドレスまたはパスワードが正しくありません',
+  SignInException: 'ログインの有効期限が切れました。最初からやり直してください',
   UserNotFoundException: 'メールアドレスまたはパスワードが正しくありません',
   InvalidPasswordException: 'パスワードの条件を満たしていません（12文字以上・大文字・小文字・数字を含む）',
   CodeMismatchException: '確認コードが正しくありません',
@@ -61,7 +62,11 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 function toMessage(err: unknown): string {
   const name = (err as { name?: string })?.name;
-  return (name && ERROR_MESSAGES[name]) || 'エラーが発生しました。時間をおいてもう一度お試しください';
+  if (name && ERROR_MESSAGES[name]) return ERROR_MESSAGES[name];
+  // 想定外のエラーは原因を追えるよう、種類を画面に出して詳細をコンソールに残す
+  console.error('サインイン処理でエラーが発生しました', err);
+  const detail = name && name !== 'Error' ? name : (err as { message?: string })?.message;
+  return `エラーが発生しました。時間をおいてもう一度お試しください${detail ? `（${detail}）` : ''}`;
 }
 
 export function AuthGate({ children }: { children: ReactNode }) {
