@@ -2,6 +2,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import type {
   AnswerResponse,
   CatalogResponse,
+  DiagramResponse,
   QuestionDetailResponse,
   QuestionListResponse,
 } from '../../../shared/types';
@@ -62,6 +63,11 @@ export const api = {
       'POST',
       `${examPath(category, exam)}/questions/${encodeURIComponent(id)}/answer`,
       { selected },
+    ),
+  diagram: (category: string, exam: string, id: string, choice: number) =>
+    request<DiagramResponse>(
+      'GET',
+      `${examPath(category, exam)}/questions/${encodeURIComponent(id)}/diagrams/${choice}`,
     ),
   resetProgress: (category: string, exam: string) =>
     request<{ deleted: number }>('DELETE', `${examPath(category, exam)}/progress`),

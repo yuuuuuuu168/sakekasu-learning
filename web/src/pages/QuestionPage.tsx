@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Image as ImageIcon, MessageCircle, RotateCcw, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronDown, LoaderCircle, MessageCircle, RotateCcw, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { AnswerResponse, QuestionDetailResponse } from '../../../shared/types';
@@ -9,9 +9,6 @@ import { ErrorMessage, Loading } from '../components/Status';
 import { api } from '../lib/api';
 import { LABELS, relabel, shuffledOrder } from '../lib/choices';
 import { nextInSession } from '../lib/study-session';
-
-/** 開閉状態の管理で、図解を選択肢の index と区別するためのキー */
-const DIAGRAM_KEY = -1;
 
 export function QuestionPage() {
   const { category = '', exam = '', id = '' } = useParams();
@@ -25,9 +22,11 @@ export function QuestionPage() {
   const [result, setResult] = useState<AnswerResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  /** 開いている解説（原本の index。図解は DIAGRAM_KEY）。最初はすべて閉じておく */
+  /** 開いている解説（原本の index）。最初はすべて閉じておく */
   const [openExplanations, setOpenExplanations] = useState<Set<number>>(new Set());
-  const [diagramZoomed, setDiagramZoomed] = useState(false);
+  /** 選択肢ごとの図解（原本の index → data URL / 読み込み中は null / 失敗は 'error'） */
+  const [diagrams, setDiagrams] = useState<Record<number, string | null>>({});
+  const [zoomedDiagram, setZoomedDiagram] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setQuestion(null);
@@ -35,7 +34,8 @@ export function QuestionPage() {
     setResult(null);
     setSelected([]);
     setOpenExplanations(new Set());
-    setDiagramZoomed(false);
+    setDiagrams({});
+    setZoomedDiagram(null);
     setChatOpen(false);
     api.question(category, exam, id).then(
       (q) => {
@@ -87,15 +87,31 @@ export function QuestionPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const toggleExplanation = (original: number) =>
+  /** 図解は解説を開いたときに初めて読み込む（1問に数枚あるため、回答時にまとめて取らない） */
+  const loadDiagrams = (originals: number[]) => {
+    const targets = originals.filter(
+      (o) => result?.diagramChoices.includes(o) && !(o in diagrams),
+    );
+    if (targets.length === 0) return;
+    setDiagrams((prev) => ({ ...prev, ...Object.fromEntries(targets.map((o) => [o, null])) }));
+    for (const o of targets) {
+      api.diagram(category, exam, id, o).then(
+        (res) => setDiagrams((prev) => ({ ...prev, [o]: res.image })),
+        () => setDiagrams((prev) => ({ ...prev, [o]: 'error' })),
+      );
+    }
+  };
+
+  const toggleExplanation = (original: number) => {
+    if (!openExplanations.has(original)) loadDiagrams([original]);
     setOpenExplanations((prev) => {
       const next = new Set(prev);
       if (next.has(original)) next.delete(original);
       else next.add(original);
       return next;
     });
-  const explanationKeys = result?.diagram ? [DIAGRAM_KEY, ...displayOrder] : displayOrder;
-  const allOpen = openExplanations.size === explanationKeys.length;
+  };
+  const allOpen = openExplanations.size === displayOrder.length;
 
   // 解説の上と下の両方に置く（解説を読まずに進むときも、読み終えてからも押しやすいように）
   const actions = (
@@ -234,39 +250,16 @@ export function QuestionPage() {
               <h2 className="font-semibold">解説</h2>
               <button
                 onClick={() =>
-                  setOpenExplanations(allOpen ? new Set() : new Set(explanationKeys))
+                  {
+                    if (!allOpen) loadDiagrams(displayOrder);
+                    setOpenExplanations(allOpen ? new Set() : new Set(displayOrder));
+                  }
                 }
                 className="text-sm text-indigo-600 hover:underline"
               >
                 {allOpen ? 'すべて閉じる' : 'すべて開く'}
               </button>
             </div>
-            {result.diagram && (
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <button
-                  onClick={() => toggleExplanation(DIAGRAM_KEY)}
-                  aria-expanded={openExplanations.has(DIAGRAM_KEY)}
-                  className="flex w-full items-center gap-2 p-4 text-left"
-                >
-                  <span className="flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-0.5 text-xs font-semibold text-white">
-                    <ImageIcon className="size-3.5" />
-                    図解
-                  </span>
-                  <span className="font-semibold">構成と流れ</span>
-                  <ChevronDown
-                    className={`ml-auto size-5 shrink-0 text-slate-400 transition ${openExplanations.has(DIAGRAM_KEY) ? 'rotate-180' : ''}`}
-                  />
-                </button>
-                {openExplanations.has(DIAGRAM_KEY) && (
-                  <div className="border-t border-slate-100 p-3">
-                    <button onClick={() => setDiagramZoomed(true)} className="block w-full cursor-zoom-in" aria-label="図解を拡大表示">
-                      <img src={result.diagram} alt={`問${question.number}の図解`} className="w-full rounded-lg" />
-                    </button>
-                    <p className="mt-1 text-center text-xs text-slate-400">クリックで拡大</p>
-                  </div>
-                )}
-              </div>
-            )}
             {displayOrder.map((original, pos) => {
               const correct = result.answers.includes(original);
               const open = openExplanations.has(original);
@@ -291,7 +284,14 @@ export function QuestionPage() {
                     />
                   </button>
                   {open && (
-                    <div className="border-t border-slate-100 p-4">
+                    <div className="space-y-3 border-t border-slate-100 p-4">
+                      {original in diagrams && (
+                        <DiagramImage
+                          src={diagrams[original]}
+                          alt={`選択肢 ${LABELS[pos]} の図解`}
+                          onZoom={setZoomedDiagram}
+                        />
+                      )}
                       <Markdown className="prose-sm">{relabel(result.explanations[original], displayOrder)}</Markdown>
                     </div>
                   )}
@@ -312,16 +312,16 @@ export function QuestionPage() {
         AI に相談
       </button>
 
-      {diagramZoomed && result?.diagram && (
+      {zoomedDiagram && (
         <div
           role="dialog"
           aria-label="図解の拡大表示"
-          onClick={() => setDiagramZoomed(false)}
+          onClick={() => setZoomedDiagram(null)}
           className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-slate-900/80 p-2 sm:p-6"
         >
-          <img src={result.diagram} alt={`問${question.number}の図解`} className="max-h-full max-w-full rounded-lg bg-white" />
+          <img src={zoomedDiagram} alt="図解" className="max-h-full max-w-full rounded-lg bg-white" />
           <button
-            onClick={() => setDiagramZoomed(false)}
+            onClick={() => setZoomedDiagram(null)}
             className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-slate-700"
             aria-label="閉じる"
           >
@@ -342,5 +342,31 @@ export function QuestionPage() {
         selected={result ? selected : []}
       />
     </div>
+  );
+}
+
+function DiagramImage({
+  src,
+  alt,
+  onZoom,
+}: {
+  src: string | null;
+  alt: string;
+  onZoom: (src: string) => void;
+}) {
+  if (src === null) {
+    return (
+      <div className="flex h-32 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+        <LoaderCircle className="size-5 animate-spin" />
+      </div>
+    );
+  }
+  if (src === 'error') {
+    return <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">図解を読み込めませんでした</p>;
+  }
+  return (
+    <button onClick={() => onZoom(src)} className="block w-full cursor-zoom-in" aria-label={`${alt}を拡大表示`}>
+      <img src={src} alt={alt} className="w-full rounded-lg ring-1 ring-slate-100" />
+    </button>
   );
 }

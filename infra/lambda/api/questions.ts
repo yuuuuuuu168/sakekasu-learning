@@ -37,11 +37,19 @@ export async function loadExam(category: string, exam: string): Promise<ExamFile
   return getJson<ExamFile>(`${category}/${exam}.json`);
 }
 
-/** 解説用の図解を data URL で返す。回答後にだけ返すため、公開の配信には置かない */
-export async function loadDiagram(category: string, exam: string, id: string): Promise<string | undefined> {
+/**
+ * 選択肢の図解を data URL で返す（choice は 0 始まり、ファイル名は 1 始まり）。
+ * 回答した人にだけ返すため、公開の配信には置かない
+ */
+export async function loadDiagram(
+  category: string,
+  exam: string,
+  id: string,
+  choice: number,
+): Promise<string | undefined> {
   try {
     const res = await s3.send(
-      new GetObjectCommand({ Bucket: BUCKET, Key: `${category}/${exam}/diagrams/${id}.png` }),
+      new GetObjectCommand({ Bucket: BUCKET, Key: `${category}/${exam}/diagrams/${id}/${choice + 1}.png` }),
     );
     const bytes = await res.Body!.transformToByteArray();
     return `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`;

@@ -71,12 +71,14 @@ agent/     AI 家庭教師（Strands Agents / AgentCore Runtime）
 
 形式チェックでは、解説の欠け・正解ゼロ・「（2 つ選択）」と正解数の不一致・問題番号の重複を検出して失敗させる。
 
-### 図解（任意）
+### 選択肢ごとの図解（任意）
 
-`content/<分野>/<資格>/diagrams/<問題番号>.drawio.png` に置くと、回答後の解説の先頭に「図解」として表示される（回答前は API が返さない）。
+`content/<分野>/<資格>/diagrams/<問題番号>/<選択肢番号>.drawio.png` に置くと、回答後にその選択肢の解説カードを開いたときに、解説文の上に表示される（回答したことのない問題には API が返さない）。
 
-- draw.io で作成し、図のデータを埋め込んだ PNG で書き出す（`draw.io -x -f png -e -s 2 -b 16 -o <出力> <入力.drawio>`）
-- 書き出した後に `python3 scripts/drawio-png-compat.py <出力>` を通す。CLI の埋め込み形式のままだと VS Code の Draw.io 拡張で空の図として開かれるため
+- 図は手で描かず、設計（JSON）から `scripts/make-diagram.py` で作る。見た目（正解・不正解の札、✕ の付け方、下のポイント欄）がそろう
+  - 設計: `content/<分野>/<資格>/diagrams/src/<問題番号>-<選択肢番号>.json`（形式はスクリプト冒頭のコメント）
+  - 実行: `python3 scripts/make-diagram.py content/aws/dop-c02/diagrams/src/DOP-2003-*.json`
+- 出力した PNG には draw.io のデータが埋め込まれている。細かい調整は draw.io（VS Code の Draw.io 拡張でも可）で開いて直してよい
 - 画面では選択肢をシャッフルするので、図の中に「選択肢1」などの番号は書かない
 
 ## 初回セットアップ

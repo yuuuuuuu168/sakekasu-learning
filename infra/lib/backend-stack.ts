@@ -111,6 +111,7 @@ export class BackendStack extends Stack {
       ['/exams/{category}/{exam}/questions', apigw.HttpMethod.GET],
       ['/exams/{category}/{exam}/questions/{id}', apigw.HttpMethod.GET],
       ['/exams/{category}/{exam}/questions/{id}/answer', apigw.HttpMethod.POST],
+      ['/exams/{category}/{exam}/questions/{id}/diagrams/{choice}', apigw.HttpMethod.GET],
       ['/exams/{category}/{exam}/progress', apigw.HttpMethod.DELETE],
     ];
     for (const [routePath, method] of routes) {

@@ -17,8 +17,8 @@ export interface QuestionRecord {
   answers: number[];
   /** 選択肢ごとの解説（choices と同じ並び） */
   explanations: string[];
-  /** 解説用の図解があるか（<category>/<exam>/diagrams/<id>.png に置く） */
-  hasDiagram?: boolean;
+  /** 図解がある選択肢の index（0 始まり）。図は <category>/<exam>/diagrams/<id>/<選択肢番号>.png */
+  diagramChoices?: number[];
 }
 
 /** 問題ビルドが出力する資格1つ分のファイル（questions/<category>/<exam>.json） */
@@ -111,9 +111,15 @@ export interface AnswerResponse {
   correct: boolean;
   answers: number[];
   explanations: string[];
-  /** 解説用の図解（PNG の data URL）。図解が無い問題では省略 */
-  diagram?: string;
+  /** 図解がある選択肢の index（0 始まり）。図は GET .../diagrams/{choice} で取得する */
+  diagramChoices: number[];
   progress: QuestionProgress;
+}
+
+/** GET /exams/{category}/{exam}/questions/{id}/diagrams/{choice} */
+export interface DiagramResponse {
+  /** PNG の data URL */
+  image: string;
 }
 
 /** AI チャットの1発言 */

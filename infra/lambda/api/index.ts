@@ -5,6 +5,7 @@
  * GET    /exams/{category}/{exam}/questions              問題一覧（本文なし）と習熟度
  * GET    /exams/{category}/{exam}/questions/{id}         問題本文（正解・解説なし）
  * POST   /exams/{category}/{exam}/questions/{id}/answer  採点して記録し、正解と解説を返す
+ * GET    /exams/{category}/{exam}/questions/{id}/diagrams/{choice}  選択肢の図解（回答済みの問題だけ）
  * DELETE /exams/{category}/{exam}/progress               資格1つ分の履歴を消す
  *
  * 正解と解説は回答を送るまで返さない。採点もサーバーで行い、記録の正しさを
@@ -19,6 +20,7 @@ import type {
   AnswerRequest,
   AnswerResponse,
   CatalogResponse,
+  DiagramResponse,
   QuestionDetailResponse,
   QuestionListResponse,
 } from '../../../shared/types';
@@ -164,17 +166,26 @@ async function postAnswer(event: Event, userId: string): Promise<AnswerResponse>
     : event.body;
   const selected = parseAnswer(body, question.choices.length);
   const correct = isCorrect(selected, question.answers);
-  const [item, diagram] = await Promise.all([
-    recordAnswer(userId, category, exam, id, correct, selected),
-    question.hasDiagram ? loadDiagram(category, exam, id) : Promise.resolve(undefined),
-  ]);
+  const item = await recordAnswer(userId, category, exam, id, correct, selected);
   return {
     correct,
     answers: question.answers,
     explanations: question.explanations,
-    diagram,
+    diagramChoices: question.diagramChoices ?? [],
     progress: toProgress(id, item),
   };
+}
+
+async function getDiagram(event: Event, userId: string): Promise<DiagramResponse> {
+  const { category, exam, id, question } = await requireQuestion(event);
+  const choice = Number(pathParam(event, 'choice', /^\d{1,2}$/));
+  if (!question.diagramChoices?.includes(choice)) throw new HttpError(404, '図解がありません');
+  // 図解は正解を含むため、回答したことのある問題だけに返す
+  const item = await getProgress(userId, category, exam, id);
+  if (!item || item.attempts === 0) throw new HttpError(403, '回答すると図解を表示できます');
+  const image = await loadDiagram(category, exam, id, choice);
+  if (!image) throw new HttpError(404, '図解がありません');
+  return { image };
 }
 
 export async function handler(event: Event): Promise<APIGatewayProxyResultV2> {
@@ -191,6 +202,8 @@ export async function handler(event: Event): Promise<APIGatewayProxyResultV2> {
         return json(200, await getQuestion(event, userId));
       case 'POST /exams/{category}/{exam}/questions/{id}/answer':
         return json(200, await postAnswer(event, userId));
+      case 'GET /exams/{category}/{exam}/questions/{id}/diagrams/{choice}':
+        return json(200, await getDiagram(event, userId));
       case 'DELETE /exams/{category}/{exam}/progress': {
         const { category, exam } = await requireExam(event);
         return json(200, { deleted: await resetExamProgress(userId, category, exam) });
