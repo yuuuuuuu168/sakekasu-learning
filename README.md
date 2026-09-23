@@ -73,24 +73,48 @@ agent/     AI 家庭教師（Strands Agents / AgentCore Runtime）
 
 ## 初回セットアップ
 
-前提: sakekasu-builder と同じアカウント（232791540685）。CDK のブートストラップ済み（ap-northeast-1 / us-east-1）、`sakekasu-builder.com` のホストゾーンが Route 53 にあること。
+前提: sakekasu-builder と同じアカウント（232791540685）で、CDK のブートストラップが ap-northeast-1 と us-east-1 の両方で済んでいること。
+
+### 1. DNS（サブドメインの委任）
+
+`sakekasu-builder.com` の権威ゾーンは管理アカウント（<管理アカウント ID>）にある。sakekasu-kakeibo と同じく、
+このアカウントに `learning.sakekasu-builder.com` のゾーンを作り、親ゾーンから NS で委任する。
 
 ```bash
-aws sso login --profile sakekasu-builder
-AWS_PROFILE=sakekasu-builder aws sts get-caller-identity
+# 232791540685 にサブドメインのゾーンを作る（出力のゾーン ID と NS を控える）
+AWS_PROFILE=sakekasu-builder aws route53 create-hosted-zone \
+  --name learning.sakekasu-builder.com --caller-reference sakekasu-learning-$(date +%Y%m%d) \
+  --hosted-zone-config "Comment=sakekasu-learning delivery zone, delegated from parent" \
+  --query "[HostedZone.Id,DelegationSet.NameServers]"
 
-# 1. us-east-1 のブートストラップを確認（無ければ実行）
-AWS_PROFILE=sakekasu-builder aws cloudformation describe-stacks --stack-name CDKToolkit --region us-east-1
+# 管理アカウントの親ゾーン（Z0378029DKDVAJ2VE475）に NS レコードを足す
+AWS_PROFILE=yuuuuuuuki7749 aws route53 change-resource-record-sets \
+  --hosted-zone-id Z0378029DKDVAJ2VE475 --change-batch file://ns-delegation.json
+```
 
-# 2. GitHub Actions 用ロール（CI 自身の権限なので手動）
-cd infra
-npm ci
+`ns-delegation.json` の例（NS は上で控えた4つ）:
+
+```json
+{
+  "Changes": [{
+    "Action": "UPSERT",
+    "ResourceRecordSet": {
+      "Name": "learning.sakekasu-builder.com",
+      "Type": "NS",
+      "TTL": 3600,
+      "ResourceRecords": [{ "Value": "ns-xxx.awsdns-xx.org" }, { "Value": "..." }, { "Value": "..." }, { "Value": "..." }]
+    }
+  }]
+}
+```
+
+最後に、控えたゾーン ID（`Z` から始まる部分）を `infra/cdk.json` の `hostedZoneId` に入れてコミットする。
+
+### 2. GitHub Actions 用ロール（CI 自身の権限なので手動）
+
+```bash
+cd infra && npm ci
 AWS_PROFILE=sakekasu-builder npx cdk deploy sakekasu-learning-github-oidc -c github-oidc=true
-
-# 3. ホストゾーンの lookup 結果を cdk.context.json に保存してコミットする
-npm run package:agent
-AWS_PROFILE=sakekasu-builder npx cdk synth > /dev/null
-git add cdk.context.json
 ```
 
 その後 main に push すると deploy ワークフローが全スタックと問題データ・フロントエンドをデプロイする。

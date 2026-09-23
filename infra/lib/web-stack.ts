@@ -10,7 +10,12 @@ import type { Construct } from 'constructs';
 export interface WebStackProps extends StackProps {
   envName: string;
   domainName: string;
-  hostedZoneName: string;
+  /**
+   * domainName 用のホストゾーン ID。sakekasu-builder.com の権威ゾーンは管理アカウントにあるため、
+   * このアカウントに learning.sakekasu-builder.com のゾーンを手動で作り、親から NS で委任している
+   * （sakekasu-kakeibo と同じ方式。手順は README）
+   */
+  hostedZoneId: string;
   /** API / 認証 / AI チャットのリージョン（CSP の connect-src に使う） */
   backendRegion: string;
 }
@@ -27,9 +32,12 @@ export interface WebStackProps extends StackProps {
 export class WebStack extends Stack {
   constructor(scope: Construct, id: string, props: WebStackProps) {
     super(scope, id, props);
-    const { envName, domainName, hostedZoneName, backendRegion } = props;
+    const { envName, domainName, hostedZoneId, backendRegion } = props;
 
-    const zone = route53.HostedZone.fromLookup(this, 'Zone', { domainName: hostedZoneName });
+    const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', {
+      hostedZoneId,
+      zoneName: domainName,
+    });
 
     const certificate = new acm.Certificate(this, 'Certificate', {
       domainName,

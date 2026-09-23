@@ -10,15 +10,7 @@ import { WebStack } from '../lib/web-stack';
 const account = '123456789012';
 
 function synth() {
-  const app = new cdk.App({
-    context: {
-      // HostedZone.fromLookup をテストで解決させるためのダミー
-      [`hosted-zone:account=${account}:domainName=example.com:region=us-east-1`]: {
-        Id: '/hostedzone/Z000TEST',
-        Name: 'example.com.',
-      },
-    },
-  });
+  const app = new cdk.App();
   const env = { account, region: 'ap-northeast-1' };
   const auth = new AuthStack(app, 'auth', { env, envName: 'test', siteUrl: 'https://learning.example.com' });
   const backend = new BackendStack(app, 'backend', {
@@ -39,7 +31,7 @@ function synth() {
     env: { account, region: 'us-east-1' },
     envName: 'test',
     domainName: 'learning.example.com',
-    hostedZoneName: 'example.com',
+    hostedZoneId: 'Z000TEST',
     backendRegion: 'ap-northeast-1',
   });
   return {

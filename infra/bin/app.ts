@@ -23,7 +23,7 @@ if (app.node.tryGetContext('github-oidc') === 'true') {
 } else {
   const envName: string = app.node.tryGetContext('env') ?? 'dev';
   const domainName: string = app.node.getContext('domainName');
-  const hostedZoneName: string = app.node.getContext('hostedZoneName');
+  const hostedZoneId: string = app.node.getContext('hostedZoneId');
   const siteUrl = `https://${domainName}`;
   const prefix = `sakekasu-learning-${envName}`;
   const env = { account, region };
@@ -51,7 +51,7 @@ if (app.node.tryGetContext('github-oidc') === 'true') {
     env: { account, region: webRegion },
     envName,
     domainName,
-    hostedZoneName,
+    hostedZoneId,
     backendRegion: region,
   });
 }
