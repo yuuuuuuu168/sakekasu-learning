@@ -73,11 +73,12 @@ agent/     AI 家庭教師（Strands Agents / AgentCore Runtime）
 
 ### 選択肢ごとの図解（任意）
 
-`content/<分野>/<資格>/diagrams/<問題番号>/<選択肢番号>.drawio.png` に置くと、回答後にその選択肢の解説カードを開いたときに、解説文の上に表示される（回答したことのない問題には API が返さない）。
+`content/<分野>/<資格>/diagrams/<問題番号>/<問題番号>_選択肢<番号>_<正解|不正解>.drawio.png`（例: `DOP-2003/DOP-2003_選択肢1_正解.drawio.png`）に置くと、回答後にその選択肢の解説カードを開いたときに、解説文の上に表示される（回答したことのない問題には API が返さない）。
 
 - 図は手で描かず、設計（JSON）から `scripts/make-diagram.py` で作る。見た目（正解・不正解の札、✕ の付け方、下のポイント欄）がそろう
-  - 設計: `content/<分野>/<資格>/diagrams/src/<問題番号>-<選択肢番号>.json`（形式はスクリプト冒頭のコメント）
-  - 実行: `python3 scripts/make-diagram.py content/aws/dop-c02/diagrams/src/DOP-2003-*.json`
+  - 設計: `content/<分野>/<資格>/diagrams/src/<問題番号>_選択肢<番号>.json`（形式はスクリプト冒頭のコメント）
+  - 実行: `python3 scripts/make-diagram.py content/aws/dop-c02/diagrams/src/DOP-2003_*.json`
+  - 選択肢の番号は md の元の番号。ファイル名の正解/不正解が問題メモと食い違うとビルドで止まる
 - 出力した PNG には draw.io のデータが埋め込まれている。細かい調整は draw.io（VS Code の Draw.io 拡張でも可）で開いて直してよい
 - 画面では選択肢をシャッフルするので、図の中に「選択肢1」などの番号は書かない
 

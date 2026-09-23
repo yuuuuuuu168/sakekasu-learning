@@ -6,8 +6,9 @@
 
 使い方:
     python3 scripts/make-diagram.py <設計.json> [...]
-    （content/<分野>/<資格>/diagrams/src/<問題番号>-<選択肢番号>.json を
-      content/<分野>/<資格>/diagrams/<問題番号>/<選択肢番号>.drawio.png に書き出す）
+    （content/<分野>/<資格>/diagrams/src/<問題番号>_選択肢<番号>.json を
+      content/<分野>/<資格>/diagrams/<問題番号>/<問題番号>_選択肢<番号>_<正解|不正解>.drawio.png に書き出す）
+    選択肢の番号は md の元の番号（画面の A, B, C とは別）。
 
 設計の形式:
 {
@@ -178,20 +179,28 @@ def build(spec: dict) -> str:
     )
 
 
-def output_path(spec_path: str) -> str:
+def output_path(spec_path: str, spec: dict) -> str:
     src_dir = os.path.dirname(os.path.abspath(spec_path))
     diagrams_dir = os.path.dirname(src_dir)
     name = os.path.splitext(os.path.basename(spec_path))[0]
-    question_id, choice = name.rsplit("-", 1)
+    question_id, sep, choice = name.rpartition("_選択肢")
+    if not sep or not choice.isdigit():
+        raise SystemExit(f"{spec_path}: ファイル名は <問題番号>_選択肢<番号>.json にしてください")
+    verdict = "正解" if spec["verdict"] == "correct" else "不正解"
     out_dir = os.path.join(diagrams_dir, question_id)
     os.makedirs(out_dir, exist_ok=True)
-    return os.path.join(out_dir, f"{choice}.drawio.png")
+    # 正解/不正解が変わったときに古い名前のファイルが残らないようにする
+    for old in ("正解", "不正解"):
+        stale = os.path.join(out_dir, f"{question_id}_選択肢{choice}_{old}.drawio.png")
+        if old != verdict and os.path.exists(stale):
+            os.remove(stale)
+    return os.path.join(out_dir, f"{question_id}_選択肢{choice}_{verdict}.drawio.png")
 
 
 def main(paths: list[str]) -> None:
     for spec_path in paths:
         spec = json.load(open(spec_path, encoding="utf-8"))
-        out = output_path(spec_path)
+        out = output_path(spec_path, spec)
         tmp = out.replace(".drawio.png", ".drawio")
         open(tmp, "w", encoding="utf-8").write(build(spec))
         subprocess.run([DRAWIO, "-x", "-f", "png", "-e", "-s", "2", "-b", "12", "-o", out, tmp],

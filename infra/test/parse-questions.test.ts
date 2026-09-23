@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { QuestionFormatError, parseQuestions } from '../scripts/questions/parse';
 import { buildQuestions } from '../scripts/questions/build';
@@ -78,5 +81,31 @@ describe('buildQuestions（実データ）', () => {
         expect(q.answers.length).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe('buildQuestions（図解）', () => {
+  function setup(diagramFile: string) {
+    const dir = mkdtempSync(join(tmpdir(), 'content-'));
+    mkdirSync(join(dir, 'aws/test-exam/diagrams/Q-1'), { recursive: true });
+    writeFileSync(join(dir, 'aws/category.json'), '{"name":"AWS"}');
+    writeFileSync(join(dir, 'aws/test-exam/exam.json'), '{"name":"Test"}');
+    writeFileSync(join(dir, 'aws/test-exam/q.md'), sample.slice(sample.indexOf('# Q-1')));
+    writeFileSync(join(dir, 'aws/test-exam/diagrams/Q-1', diagramFile), '');
+    return dir;
+  }
+
+  it('ファイル名から図解のある選択肢を読み取る', () => {
+    const { exams, diagrams } = buildQuestions(setup('Q-1_選択肢2_正解.drawio.png'));
+    expect(exams[0].questions[0].diagramChoices).toEqual([1]);
+    expect(diagrams).toHaveLength(1);
+  });
+
+  it('ファイル名の正解/不正解が問題メモと食い違ったら失敗する', () => {
+    expect(() => buildQuestions(setup('Q-1_選択肢2_不正解.drawio.png'))).toThrow(/問題メモでは正解/);
+  });
+
+  it('形式の違うファイル名は失敗する', () => {
+    expect(() => buildQuestions(setup('2.drawio.png'))).toThrow(/ファイル名は/);
   });
 });

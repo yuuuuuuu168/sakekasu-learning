@@ -4,7 +4,8 @@
  *   content/<category>/category.json      分野のメタ情報（AWS, OCI, Terraform ...）
  *   content/<category>/<exam>/exam.json   資格のメタ情報
  *   content/<category>/<exam>/*.md        問題メモ（複数ファイル可）
- *   content/<category>/<exam>/diagrams/<問題番号>/<選択肢番号>.drawio.png  選択肢ごとの図解（任意。draw.io のデータ入り PNG）
+ *   content/<category>/<exam>/diagrams/<問題番号>/<問題番号>_選択肢<番号>_<正解|不正解>.drawio.png
+ *                                          選択肢ごとの図解（任意。draw.io のデータ入り PNG）
  *
  * 出力:
  *   build/questions/catalog.json
@@ -55,6 +56,9 @@ function assertSlug(name: string, path: string) {
   }
 }
 
+/** 図解のファイル名: <問題番号>_選択肢<番号>_<正解|不正解>.drawio.png */
+const DIAGRAM_FILE = /^(.+)_選択肢(\d+)_(正解|不正解)\.drawio\.png$/;
+
 /** DOP-2003 と DOP-10 のような番号を数値として並べる */
 const collator = new Intl.Collator('ja', { numeric: true });
 
@@ -97,11 +101,18 @@ export function buildQuestions(contentDir = CONTENT_DIR) {
         const question = questions.find((q) => q.id === id);
         if (!question) throw new Error(`${category}/${exam}/diagrams/${id}: 問題番号 ${id} の問題がありません`);
         const choices: number[] = [];
-        for (const file of readdirSync(join(diagramDir, id)).filter((f) => f.endsWith('.drawio.png'))) {
-          const n = Number(file.slice(0, -'.drawio.png'.length));
-          if (!Number.isInteger(n) || n < 1 || n > question.choices.length) {
-            throw new Error(`${category}/${exam}/diagrams/${id}/${file}: 選択肢番号が不正です`);
+        for (const file of readdirSync(join(diagramDir, id)).filter((f) => f.endsWith('.png'))) {
+          const where = `${category}/${exam}/diagrams/${id}/${file}`;
+          const m = DIAGRAM_FILE.exec(file);
+          if (!m || m[1] !== id) {
+            throw new Error(`${where}: ファイル名は ${id}_選択肢<番号>_<正解|不正解>.drawio.png にしてください`);
           }
+          const n = Number(m[2]);
+          if (n < 1 || n > question.choices.length) throw new Error(`${where}: 選択肢${n}はありません`);
+          if (choices.includes(n - 1)) throw new Error(`${where}: 選択肢${n}の図解が重複しています`);
+          // ファイル名の正解/不正解が問題メモと食い違っていたら止める（名前を見て判断できるようにするため）
+          const actual = question.answers.includes(n - 1) ? '正解' : '不正解';
+          if (m[3] !== actual) throw new Error(`${where}: 選択肢${n}は問題メモでは${actual}です`);
           choices.push(n - 1);
           diagrams.push({ category, exam, id, choice: n, source: join(diagramDir, id, file) });
         }
