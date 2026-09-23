@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+.venv/
+
+# build outputs
+dist/
+build/
+infra/cdk.out/
+agent/dist/
+*.tsbuildinfo
+__pycache__/
+.pytest_cache/
+
+# local settings / secrets
+.env
+.env.*
+*.local
+web/public/config.json
+.claude/settings.local.json
+
+# terraform-style wrapper logs, OS files
+history/
+.DS_Store
+.claude/scheduled_tasks.lock

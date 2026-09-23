@@ -1,0 +1,66 @@
+# PR で cdk diff を実行し、結果を PR にコメントする（既存のコメントがあれば更新する）。
+name: cdk-diff
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+      - 'agent/**'
+      - '.github/workflows/cdk-diff.yml'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: agent/uv.lock
+      # 依存の取得は AWS の認証情報を入れる前に済ませる
+      # （乗っ取られた依存のインストール時スクリプトに一時認証情報を読ませない）
+      - run: npm ci --ignore-scripts
+      - run: npm run package:agent
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::232791540685:role/sakekasu-learning-github-actions-diff
+          aws-region: ap-northeast-1
+      - id: diff
+        run: |
+          set +e
+          npx cdk diff --all --no-color > diff.txt 2>&1
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- cdk-diff -->';
+            let diff = fs.readFileSync('infra/diff.txt', 'utf8');
+            if (diff.length > 60000) diff = diff.slice(0, 60000) + '\n... (truncated)';
+            const body = `${marker}\n### cdk diff\n\n\`\`\`\n${diff}\n\`\`\``;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body?.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+      - if: steps.diff.outputs.exit != '0'
+        run: |
+          echo "cdk diff が失敗しました"
+          exit 1

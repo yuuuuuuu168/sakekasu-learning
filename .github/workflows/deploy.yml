@@ -1,0 +1,97 @@
+# main への push で、インフラ・問題データ・フロントエンドをまとめてデプロイする。
+#
+# 1. テストとビルド（AWS の認証情報を入れる前に済ませる）
+# 2. cdk deploy --all（Cognito / API / AgentCore / CloudFront）
+# 3. 問題データを非公開バケットへ同期
+# 4. スタックの出力から config.json を作り、フロントエンドをサイトのバケットへ同期
+# 5. CloudFront のキャッシュを削除
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+# 同時デプロイを防ぐ。後続を打ち切らないのは、最後の main の状態を必ず反映させるため
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  ENV_NAME: dev
+  AWS_ACCOUNT_ID: '232791540685'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            infra/package-lock.json
+            web/package-lock.json
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: agent/uv.lock
+
+      # ---- 認証前: 依存の取得・テスト・ビルド ----
+      - name: 依存の取得
+        run: |
+          npm ci --ignore-scripts --prefix infra
+          npm ci --ignore-scripts --prefix web
+      - name: 問題データのビルド
+        working-directory: infra
+        run: npm run build:questions
+      - name: エージェントのテストと梱包
+        run: |
+          (cd agent && uv run --group dev pytest)
+          (cd infra && npm run package:agent)
+      - name: インフラのテスト
+        working-directory: infra
+        run: npm run typecheck && npm test
+      - name: フロントエンドのテストとビルド
+        working-directory: web
+        run: npm test && npm run build
+
+      # ---- 認証後: デプロイ ----
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::232791540685:role/sakekasu-learning-github-actions-deploy
+          aws-region: ap-northeast-1
+
+      - name: cdk deploy
+        working-directory: infra
+        run: npx cdk deploy --all --require-approval never
+
+      - name: 問題データの同期
+        run: |
+          aws s3 sync build/questions "s3://sakekasu-learning-${ENV_NAME}-questions-${AWS_ACCOUNT_ID}/" \
+            --delete --content-type application/json --cache-control no-store
+
+      - name: config.json の生成
+        working-directory: infra
+        run: npx tsx scripts/write-web-config.ts ../web/dist/config.json
+
+      - name: フロントエンドの同期
+        run: |
+          BUCKET="s3://sakekasu-learning-${ENV_NAME}-web-${AWS_ACCOUNT_ID}"
+          # ハッシュ付きのファイルは長期キャッシュ、それ以外（index.html / config.json など）は毎回確認させる
+          aws s3 sync web/dist/assets "${BUCKET}/assets" --delete \
+            --cache-control "public, max-age=31536000, immutable"
+          aws s3 sync web/dist "${BUCKET}" --delete --exclude "assets/*" \
+            --cache-control "no-cache"
+
+      - name: CloudFront のキャッシュ削除
+        run: |
+          DISTRIBUTION_ID=$(aws cloudformation describe-stacks --region us-east-1 \
+            --stack-name "sakekasu-learning-${ENV_NAME}-web" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" --output text)
+          aws cloudfront create-invalidation --distribution-id "${DISTRIBUTION_ID}" --paths "/*"

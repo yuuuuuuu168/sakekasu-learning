@@ -1,0 +1,16 @@
+{
+  "app": "npx tsx bin/app.ts",
+  "watch": { "include": ["**"], "exclude": ["README.md", "cdk*.json", "node_modules", "test", "cdk.out"] },
+  "context": {
+    "env": "dev",
+    "domainName": "learning.sakekasu-builder.com",
+    "hostedZoneName": "sakekasu-builder.com",
+    "@aws-cdk/aws-lambda-nodejs:useLatestRuntimeVersion": true,
+    "@aws-cdk/aws-s3:publicAccessBlockedByDefault": true,
+    "@aws-cdk/aws-lambda:useCdkManagedLogGroup": true,
+    "@aws-cdk/core:explicitStackTags": true,
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/core:target-partitions": ["aws"]
+  }
+}
