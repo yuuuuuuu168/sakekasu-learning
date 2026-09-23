@@ -36,15 +36,18 @@ export class AuthStack extends Stack {
         requireSymbols: false,
         tempPasswordValidity: Duration.days(7),
       },
-      // ログイン画面は自前（パスワード + 初回変更 + 再設定）のみ。MFA を足すなら画面も対応させる
-      mfa: cognito.Mfa.OFF,
+      // MFA は必須。2要素目は認証アプリ（TOTP）だけにする（SMS は従量課金、メールは SES が要るため）。
+      // 未登録のユーザーはログイン時に登録を求められる（画面は web/src/auth/AuthGate.tsx）
+      mfa: cognito.Mfa.REQUIRED,
+      mfaSecondFactor: { otp: true, sms: false, email: false },
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
       userInvitation: {
         emailSubject: '【sakekasu learning】アカウントを作成しました',
         emailBody:
           `sakekasu learning（${siteUrl}）のアカウントを作成しました。<br><br>` +
           'ユーザー名: {username}<br>仮パスワード: {####}<br><br>' +
-          '初回ログイン時に新しいパスワードを設定してください。仮パスワードの有効期限は7日間です。',
+          '初回ログイン時に、新しいパスワードの設定と、認証アプリ（Google Authenticator など）の登録を行ってください。<br>' +
+          '仮パスワードの有効期限は7日間です。',
       },
       deletionProtection: true,
       removalPolicy: RemovalPolicy.RETAIN,

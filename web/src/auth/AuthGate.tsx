@@ -1,9 +1,11 @@
 /**
  * ログインの門番。未ログインならログイン画面を出し、ログイン済みなら子要素を出す。
  *
- * 招待制なのでサインアップ画面は無い。扱う流れは次の3つだけ。
+ * 招待制なのでサインアップ画面は無い。扱う流れは次のとおり。
  * - ログイン
  * - 初回ログイン時のパスワード変更（管理者が作ったユーザーは仮パスワードで始まる）
+ * - 認証アプリ（TOTP）の登録。ユーザープールで MFA を必須にしているため、未登録なら必ず求められる
+ * - ログインのたびの TOTP コード入力
  * - パスワードを忘れたときの再設定（メールで確認コード）
  */
 import {
@@ -14,8 +16,10 @@ import {
   resetPassword,
   signIn,
   signOut,
+  type SignInOutput,
 } from 'aws-amplify/auth';
 import { GraduationCap, LoaderCircle } from 'lucide-react';
+import QRCode from 'qrcode';
 import {
   createContext,
   useCallback,
@@ -39,13 +43,17 @@ export function useAuth(): AuthContextValue {
   return value;
 }
 
-type View = 'signIn' | 'newPassword' | 'forgot' | 'forgotConfirm';
+type View = 'signIn' | 'newPassword' | 'totpSetup' | 'totpCode' | 'forgot' | 'forgotConfirm';
+
+/** 認証アプリに表示されるサービス名 */
+const TOTP_ISSUER = 'sakekasu learning';
 
 const ERROR_MESSAGES: Record<string, string> = {
   NotAuthorizedException: 'メールアドレスまたはパスワードが正しくありません',
   UserNotFoundException: 'メールアドレスまたはパスワードが正しくありません',
   InvalidPasswordException: 'パスワードの条件を満たしていません（12文字以上・大文字・小文字・数字を含む）',
   CodeMismatchException: '確認コードが正しくありません',
+  EnableSoftwareTokenMFAException: '認証アプリのコードが正しくありません。表示中の最新のコードを入力してください',
   ExpiredCodeException: '確認コードの有効期限が切れています。もう一度送信してください',
   LimitExceededException: '試行回数が上限に達しました。しばらく待ってからお試しください',
   TooManyRequestsException: '試行回数が上限に達しました。しばらく待ってからお試しください',
@@ -100,6 +108,8 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [code, setCode] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [totpSetup, setTotpSetup] = useState<{ qr: string; secret: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -117,26 +127,61 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
     }
   };
 
-  const handleSignIn = run(async () => {
-    const { isSignedIn, nextStep } = await signIn({ username: username.trim(), password });
+  /** Cognito が次に求めてきたことに合わせて画面を切り替える */
+  const handleNextStep = async ({ isSignedIn, nextStep }: SignInOutput): Promise<void> => {
     if (isSignedIn) return onSignedIn();
-    if (nextStep.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
-      setView('newPassword');
-      setNotice('初回ログインです。新しいパスワードを設定してください');
-      return;
+    setTotpCode('');
+    switch (nextStep.signInStep) {
+      case 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED':
+        setView('newPassword');
+        setNotice('初回ログインです。新しいパスワードを設定してください');
+        return;
+      case 'CONTINUE_SIGN_IN_WITH_TOTP_SETUP': {
+        const uri = nextStep.totpSetupDetails.getSetupUri(TOTP_ISSUER, username.trim()).toString();
+        setTotpSetup({
+          qr: await QRCode.toDataURL(uri, { margin: 1, width: 200 }),
+          secret: nextStep.totpSetupDetails.sharedSecret,
+        });
+        setView('totpSetup');
+        setNotice('ログインには認証アプリ（Google Authenticator など）の登録が必要です');
+        return;
+      }
+      case 'CONFIRM_SIGN_IN_WITH_TOTP_CODE':
+        setView('totpCode');
+        setNotice(null);
+        return;
+      // 2要素目は TOTP だけを有効にしているので、選択を求められたら TOTP を選ぶ
+      case 'CONTINUE_SIGN_IN_WITH_MFA_SELECTION':
+      case 'CONTINUE_SIGN_IN_WITH_MFA_SETUP_SELECTION':
+        return handleNextStep(await confirmSignIn({ challengeResponse: 'TOTP' }));
+      case 'RESET_PASSWORD':
+        setView('forgot');
+        setNotice('パスワードの再設定が必要です');
+        return;
+      default:
+        throw new Error(nextStep.signInStep);
     }
-    if (nextStep.signInStep === 'RESET_PASSWORD') {
-      setView('forgot');
-      setNotice('パスワードの再設定が必要です');
-      return;
-    }
-    throw new Error(nextStep.signInStep);
+  };
+
+  const handleSignIn = run(async () => {
+    await handleNextStep(await signIn({ username: username.trim(), password }));
   });
 
   const handleNewPassword = run(async () => {
-    const { isSignedIn } = await confirmSignIn({ challengeResponse: newPassword });
-    if (isSignedIn) await onSignedIn();
+    await handleNextStep(await confirmSignIn({ challengeResponse: newPassword }));
   });
+
+  const handleTotp = run(async () => {
+    await handleNextStep(await confirmSignIn({ challengeResponse: totpCode.trim() }));
+  });
+
+  const backToSignIn = () => {
+    setView('signIn');
+    setPassword('');
+    setTotpSetup(null);
+    setNotice(null);
+    setError(null);
+  };
 
   const handleForgot = run(async () => {
     await resetPassword({ username: username.trim() });
@@ -222,6 +267,42 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
             </form>
           )}
 
+          {view === 'totpSetup' && totpSetup && (
+            <form onSubmit={handleTotp} className="space-y-4">
+              <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-600">
+                <li>認証アプリで下の QR コードを読み取る</li>
+                <li>アプリに表示された6桁のコードを入力する</li>
+              </ol>
+              <img src={totpSetup.qr} alt="認証アプリ登録用の QR コード" className="mx-auto size-48 rounded-lg ring-1 ring-slate-200" />
+              <details className="text-xs text-slate-500">
+                <summary className="cursor-pointer">QR コードを読み取れない場合</summary>
+                <p className="mt-2">アプリで「セットアップキーを入力」を選び、次のキーを入力してください。</p>
+                <code className="mt-1 block break-all rounded bg-slate-100 px-2 py-1.5 font-mono text-slate-700">
+                  {totpSetup.secret}
+                </code>
+              </details>
+              <TotpInput className={input} value={totpCode} onChange={setTotpCode} />
+              <button className={button} disabled={busy || totpCode.trim().length !== 6}>
+                {busy && <LoaderCircle className="size-4 animate-spin" />}登録してログイン
+              </button>
+            </form>
+          )}
+
+          {view === 'totpCode' && (
+            <form onSubmit={handleTotp} className="space-y-4">
+              <p className="text-sm text-slate-600">認証アプリに表示されている6桁のコードを入力してください。</p>
+              <TotpInput className={input} value={totpCode} onChange={setTotpCode} />
+              <button className={button} disabled={busy || totpCode.trim().length !== 6}>
+                {busy && <LoaderCircle className="size-4 animate-spin" />}ログイン
+              </button>
+              <div className="text-center">
+                <button type="button" className={link} onClick={backToSignIn}>
+                  ログインに戻る
+                </button>
+              </div>
+            </form>
+          )}
+
           {view === 'forgot' && (
             <form onSubmit={handleForgot} className="space-y-4">
               <label className="block space-y-1">
@@ -264,5 +345,32 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
         </p>
       </div>
     </div>
+  );
+}
+
+function TotpInput({
+  className,
+  value,
+  onChange,
+}: {
+  className: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-sm font-medium">認証コード（6桁）</span>
+      <input
+        className={`${className} text-center font-mono text-lg tracking-[0.4em]`}
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        pattern="[0-9]{6}"
+        maxLength={6}
+        required
+        autoFocus
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
+      />
+    </label>
   );
 }

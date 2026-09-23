@@ -2,7 +2,7 @@
 
 資格試験（AWS / OCI / Terraform ...）の問題演習サイト。<https://learning.sakekasu-builder.com/>
 
-- 招待制のログイン（Cognito）。回答履歴をユーザーごとに記録し、直近2回の正誤で習熟度を判定する
+- 招待制のログイン（Cognito）。MFA 必須（認証アプリの TOTP）。回答履歴をユーザーごとに記録し、直近2回の正誤で習熟度を判定する
 - 問題文はそのまま、選択肢は毎回シャッフルして出題する。解説は回答後に折りたたみで表示する
 - 問題ごとに AI（Claude Sonnet）に相談できる。AWS 公式ドキュメントを MCP で参照しながら答える
 
@@ -127,6 +127,7 @@ AWS_PROFILE=sakekasu-builder npx cdk deploy sakekasu-learning-github-oidc -c git
 ## ユーザーの招待
 
 セルフサインアップは無効。管理者がユーザーを作ると、仮パスワードがメールで届く。
+初回ログインではパスワードの変更と、認証アプリ（Google Authenticator など）の登録を求められる。
 
 ```bash
 USER_POOL_ID=$(AWS_PROFILE=sakekasu-builder aws cloudformation describe-stacks \

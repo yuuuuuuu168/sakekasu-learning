@@ -54,6 +54,9 @@ describe('stacks', () => {
   it('招待制（セルフサインアップ無効）の User Pool を作る', () => {
     t.auth.hasResourceProperties('AWS::Cognito::UserPool', {
       AdminCreateUserConfig: Match.objectLike({ AllowAdminCreateUserOnly: true }),
+      // MFA は必須で、2要素目は TOTP だけ
+      MfaConfiguration: 'ON',
+      EnabledMfas: ['SOFTWARE_TOKEN_MFA'],
     });
   });
 
