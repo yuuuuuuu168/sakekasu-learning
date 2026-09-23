@@ -38,26 +38,88 @@ NG = "#D13212"
 
 # アイコン名 → (draw.io のスタイル, 幅, 高さ)
 RES = "sketch=0;outlineConnect=0;fontColor=#232F3E;strokeColor=#ffffff;dashed=0;html=1;fontSize=12;aspect=fixed;shape=mxgraph.aws4.resourceIcon;"
-ICONS = {
-    "codepipeline": (RES + "fillColor=#C925D1;resIcon=mxgraph.aws4.codepipeline;", 48, 48),
-    "codebuild": (RES + "fillColor=#C925D1;resIcon=mxgraph.aws4.codebuild;", 48, 48),
-    "codedeploy": (RES + "fillColor=#C925D1;resIcon=mxgraph.aws4.codedeploy;", 48, 48),
-    "cloudformation": (RES + "fillColor=#E7157B;resIcon=mxgraph.aws4.cloudformation;", 48, 48),
-    "s3": (RES + "fillColor=#7AA116;resIcon=mxgraph.aws4.s3;", 48, 48),
-    "kms": (RES + "fillColor=#DD344C;resIcon=mxgraph.aws4.key_management_service;", 48, 48),
-    "iam": (RES + "fillColor=#DD344C;resIcon=mxgraph.aws4.identity_and_access_management;", 48, 48),
-    "ecs": (RES + "fillColor=#ED7100;resIcon=mxgraph.aws4.ecs;", 48, 48),
-    "lambda": (RES + "fillColor=#ED7100;resIcon=mxgraph.aws4.lambda;", 48, 48),
-    "ec2": (RES + "fillColor=#ED7100;resIcon=mxgraph.aws4.ec2;", 48, 48),
-    "ssm": (RES + "fillColor=#E7157B;resIcon=mxgraph.aws4.systems_manager;", 48, 48),
-    "cloudwatch": (RES + "fillColor=#E7157B;resIcon=mxgraph.aws4.cloudwatch_2;", 48, 48),
-    "eventbridge": (RES + "fillColor=#E7157B;resIcon=mxgraph.aws4.eventbridge;", 48, 48),
-    "sns": (RES + "fillColor=#E7157B;resIcon=mxgraph.aws4.sns;", 48, 48),
-    "vpc_endpoint": ("sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#8C4FFF;strokeColor=none;dashed=0;html=1;fontSize=12;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.endpoints;", 48, 48),
-    "role": ("sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=none;dashed=0;html=1;fontSize=12;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.role;", 62, 35),
-    "policy": ("shape=note;size=12;whiteSpace=wrap;html=1;fillColor=#F2F3F3;strokeColor=#879196;fontColor=#232F3E;fontSize=11;", 48, 48),
-    "box": ("rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F3F3;strokeColor=#879196;fontColor=#232F3E;fontSize=12;", 120, 40),
+SHAPE = "sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=none;dashed=0;html=1;fontSize=12;aspect=fixed;pointerEvents=1;"
+
+# サービスアイコン（色付きの四角）: 名前 → (resIcon, 色)
+SERVICES = {
+    # 開発者ツール
+    "codepipeline": ("codepipeline", "#C925D1"), "codebuild": ("codebuild", "#C925D1"),
+    "codedeploy": ("codedeploy", "#C925D1"), "codecommit": ("codecommit", "#C925D1"),
+    "codestar": ("codestar", "#C925D1"), "cloud9": ("cloud9", "#C925D1"), "xray": ("xray", "#C925D1"),
+    # 管理・ガバナンス
+    "cloudformation": ("cloudformation", "#E7157B"), "cloudwatch": ("cloudwatch_2", "#E7157B"),
+    "cloudtrail": ("cloudtrail", "#E7157B"), "config": ("config", "#E7157B"),
+    "ssm": ("systems_manager", "#E7157B"), "organizations": ("organizations", "#E7157B"),
+    "control_tower": ("control_tower", "#E7157B"), "service_catalog": ("service_catalog", "#E7157B"),
+    "trusted_advisor": ("trusted_advisor", "#E7157B"), "opsworks": ("opsworks", "#E7157B"),
+    "health": ("personal_health_dashboard", "#E7157B"),
+    # アプリケーション統合
+    "eventbridge": ("eventbridge", "#E7157B"), "sns": ("sns", "#E7157B"), "sqs": ("sqs", "#E7157B"),
+    "step_functions": ("step_functions", "#E7157B"), "api_gateway": ("api_gateway", "#E7157B"),
+    # コンピューティング・コンテナ
+    "ec2": ("ec2", "#ED7100"), "lambda": ("lambda", "#ED7100"), "ecs": ("ecs", "#ED7100"),
+    "eks": ("eks", "#ED7100"), "fargate": ("fargate", "#ED7100"), "ecr": ("ecr", "#ED7100"),
+    "elastic_beanstalk": ("elastic_beanstalk", "#ED7100"), "auto_scaling": ("auto_scaling2", "#ED7100"),
+    "serverless_app_repo": ("serverless_application_repository", "#ED7100"),
+    # ストレージ・データベース
+    "s3": ("s3", "#7AA116"), "efs": ("elastic_file_system", "#7AA116"), "backup": ("backup", "#7AA116"),
+    "dynamodb": ("dynamodb", "#C925D1"), "rds": ("rds", "#C925D1"), "aurora": ("aurora", "#C925D1"),
+    # ネットワーク
+    "elb": ("elastic_load_balancing", "#8C4FFF"), "route53": ("route_53", "#8C4FFF"),
+    "cloudfront": ("cloudfront", "#8C4FFF"),
+    # セキュリティ
+    "kms": ("key_management_service", "#DD344C"), "iam": ("identity_and_access_management", "#DD344C"),
+    "secrets_manager": ("secrets_manager", "#DD344C"), "inspector": ("inspector", "#DD344C"),
+    "guardduty": ("guardduty", "#DD344C"), "security_hub": ("security_hub", "#DD344C"),
+    "sso": ("single_sign_on", "#DD344C"), "acm": ("certificate_manager", "#DD344C"),
+    "waf": ("waf", "#DD344C"), "macie": ("macie", "#DD344C"),
+    "ram": ("resource_access_manager", "#DD344C"),
+    # 分析
+    "kinesis": ("kinesis", "#8C4FFF"), "kinesis_streams": ("kinesis_data_streams", "#8C4FFF"),
+    "firehose": ("kinesis_data_firehose", "#8C4FFF"), "athena": ("athena", "#8C4FFF"),
+    "glue": ("glue", "#8C4FFF"), "opensearch": ("elasticsearch_service", "#8C4FFF"),
+    "quicksight": ("quicksight", "#8C4FFF"),
 }
+
+# リソースアイコン（背景なし）: 名前 → (shape, 色, 幅, 高さ)
+RESOURCES = {
+    "role": ("role", "#DD344C", 62, 35),
+    "user": ("user", "#232F3E", 40, 40),
+    "users": ("users", "#232F3E", 48, 48),
+    "client": ("client", "#232F3E", 48, 48),
+    "server": ("traditional_server", "#232F3E", 36, 48),
+    "datacenter": ("corporate_data_center", "#232F3E", 48, 48),
+    "instances": ("instances", "#ED7100", 48, 48),
+    "ecs_service": ("ecs_service", "#ED7100", 48, 48),
+    "lambda_function": ("lambda_function", "#ED7100", 48, 48),
+    "ami": ("ami", "#ED7100", 48, 48),
+    "alarm": ("alarm", "#E7157B", 48, 48),
+    "parameter_store": ("parameter_store", "#E7157B", 44, 48),
+    "run_command": ("run_command", "#E7157B", 48, 48),
+    "patch_manager": ("patch_manager", "#E7157B", 48, 48),
+    "state_manager": ("state_manager", "#E7157B", 48, 48),
+    "automation": ("automation", "#E7157B", 48, 48),
+    "stack": ("stack", "#E7157B", 48, 48),
+    "template": ("template", "#E7157B", 40, 48),
+    "change_set": ("change_set", "#E7157B", 40, 48),
+    "event_rule": ("rule", "#E7157B", 48, 48),
+    "topic": ("topic", "#E7157B", 48, 48),
+    "queue": ("queue", "#E7157B", 48, 30),
+    "bucket": ("bucket", "#7AA116", 48, 48),
+    "object": ("object", "#7AA116", 48, 48),
+    "alb": ("application_load_balancer", "#8C4FFF", 48, 48),
+    "vpc_endpoint": ("endpoints", "#8C4FFF", 48, 48),
+    "internet": ("internet_alt1", "#232F3E", 48, 48),
+    "data_key": ("data_encryption_key", "#DD344C", 48, 48),
+    "artifact": ("artifact", "#C925D1", 48, 48),
+}
+
+ICONS = {name: (RES + f"fillColor={color};resIcon=mxgraph.aws4.{res};", 48, 48) for name, (res, color) in SERVICES.items()}
+ICONS.update({name: (SHAPE + f"fillColor={color};shape=mxgraph.aws4.{shape};", w, h) for name, (shape, color, w, h) in RESOURCES.items()})
+ICONS.update({
+    "policy": ("shape=note;size=12;whiteSpace=wrap;html=1;fillColor=#F2F3F3;strokeColor=#879196;fontColor=#232F3E;fontSize=11;", 40, 48),
+    "box": ("rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F3F3;strokeColor=#879196;fontColor=#232F3E;fontSize=12;", 120, 40),
+})
 
 GROUP_STYLE = (
     "points=[];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=13;fontStyle=1;"
@@ -133,7 +195,12 @@ def build(spec: dict) -> str:
             f'<mxGeometry x="{n["x"]}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>'
         )
         if not n.get("group"):
-            bottom = max(bottom, y + h + 40)
+            # 下に付くラベルの高さ（名前 1 行 + 補足の行数）だけ余白を取る。箱や上・右のラベルは余白を小さく
+            if n["icon"] == "box" or pos in ("top", "right"):
+                margin = 8
+            else:
+                margin = 24 + 15 * (len(n["sub"].split("\n")) if n.get("sub") else 0)
+            bottom = max(bottom, y + h + margin)
 
     for i, e in enumerate(spec.get("edges", [])):
         ng = e.get("ng", False)
