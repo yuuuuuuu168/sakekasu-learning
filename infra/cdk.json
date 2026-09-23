@@ -4,7 +4,7 @@
   "context": {
     "env": "dev",
     "domainName": "learning.sakekasu-builder.com",
-    "hostedZoneId": "REPLACE_WITH_LEARNING_ZONE_ID",
+    "hostedZoneId": "Z0055303DZV5QJJQ84LQ",
     "@aws-cdk/aws-lambda-nodejs:useLatestRuntimeVersion": true,
     "@aws-cdk/aws-s3:publicAccessBlockedByDefault": true,
     "@aws-cdk/aws-lambda:useCdkManagedLogGroup": true,

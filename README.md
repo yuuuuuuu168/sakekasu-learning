@@ -84,7 +84,7 @@ agent/     AI 家庭教師（Strands Agents / AgentCore Runtime）
 # 232791540685 にサブドメインのゾーンを作る（出力のゾーン ID と NS を控える）
 AWS_PROFILE=sakekasu-builder aws route53 create-hosted-zone \
   --name learning.sakekasu-builder.com --caller-reference sakekasu-learning-$(date +%Y%m%d) \
-  --hosted-zone-config "Comment=sakekasu-learning delivery zone, delegated from parent" \
+  --hosted-zone-config '{"Comment":"sakekasu-learning delivery zone - delegated from parent"}' \
   --query "[HostedZone.Id,DelegationSet.NameServers]"
 
 # 管理アカウントの親ゾーン（Z0378029DKDVAJ2VE475）に NS レコードを足す
