@@ -43,6 +43,9 @@ def test_render_hides_nothing_but_marks_unanswered():
     assert "A. よん" in text and "C. いち" in text
     assert "まだ回答していません" in text
     assert "## 正解\nA, C" in text
+    # 受験者には通し番号だけを見せる（管理用の番号は AI にも渡さない）
+    assert "問題番号: 問1" in text
+    assert "Q-1" not in text
 
 
 def test_render_answered():

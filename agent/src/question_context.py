@@ -55,6 +55,8 @@ def load_exam(category: str, exam: str) -> dict[str, Any] | None:
 class QuestionContext:
     exam_name: str
     question_id: str
+    # 画面に出す通し番号（1 始まり）。管理用の question_id は受験者に見せない
+    number: int
     question: str
     choices: list[str]
     answers: list[int]
@@ -93,9 +95,10 @@ def resolve_question(payload: dict[str, Any]) -> QuestionContext | str:
     exam_file = load_exam(category, exam)
     if not exam_file:
         return "資格が見つかりませんでした。"
-    question = next((q for q in exam_file["questions"] if q["id"] == question_id), None)
-    if not question:
+    index = next((i for i, q in enumerate(exam_file["questions"]) if q["id"] == question_id), None)
+    if index is None:
         return "問題が見つかりませんでした。"
+    question = exam_file["questions"][index]
 
     n = len(question["choices"])
     display_order = payload.get("displayOrder")
@@ -118,6 +121,7 @@ def resolve_question(payload: dict[str, Any]) -> QuestionContext | str:
     return QuestionContext(
         exam_name=exam_file.get("name", exam),
         question_id=question_id,
+        number=index + 1,
         question=question["question"],
         choices=question["choices"],
         answers=question["answers"],
@@ -131,7 +135,7 @@ def render_question(ctx: QuestionContext) -> str:
     """システムプロンプトに載せる問題の文脈（画面と同じ A, B, C... の並び）。"""
     lines = [
         f"資格: {ctx.exam_name}",
-        f"問題番号: {ctx.question_id}",
+        f"問題番号: 問{ctx.number}",
         "",
         "## 問題文",
         ctx.question,

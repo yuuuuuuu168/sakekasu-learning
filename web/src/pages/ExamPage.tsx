@@ -94,7 +94,7 @@ export function ExamPage() {
           <p className="text-xs font-medium text-slate-500">出題順</p>
           <div className="flex flex-wrap gap-2">
             <button className={option(order === 'random')} onClick={() => setOrder('random')}>ランダム</button>
-            <button className={option(order === 'sequential')} onClick={() => setOrder('sequential')}>問題番号順</button>
+            <button className={option(order === 'sequential')} onClick={() => setOrder('sequential')}>番号順</button>
           </div>
         </div>
         <button
@@ -115,16 +115,16 @@ export function ExamPage() {
             履歴をリセット
           </button>
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6">
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8">
           {data.questions.map((q) => (
             <button
               key={q.id}
               onClick={() => openQuestion(q.id)}
-              title={`${MASTERY_UI[q.mastery].label}（回答 ${q.attempts} 回）`}
+              title={`問${q.number}：${MASTERY_UI[q.mastery].label}（回答 ${q.attempts} 回）`}
               className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs ring-1 ring-slate-200 hover:bg-slate-50"
             >
               <span className={`size-2.5 shrink-0 rounded-full ${MASTERY_UI[q.mastery].dot}`} />
-              <span className="truncate font-mono">{q.id}</span>
+              <span className="truncate tabular-nums">問{q.number}</span>
             </button>
           ))}
         </div>

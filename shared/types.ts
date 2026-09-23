@@ -7,6 +7,7 @@ import type { Mastery } from './mastery';
 
 /** 問題ビルドが出力する1問分（非公開バケットにだけ置く。正解と解説を含む） */
 export interface QuestionRecord {
+  /** 管理用の問題番号（原本の見出し。例: DOP-2154）。URL と回答履歴のキーに使い、画面には出さない */
   id: string;
   /** 問題文（Markdown） */
   question: string;
@@ -70,16 +71,26 @@ export interface QuestionProgress {
   lastAnsweredAt?: string;
 }
 
+/**
+ * 画面に出す問題番号（資格ごとの 1 始まりの通し番号）。
+ * 管理用の番号（id）の並び順で振るため、途中に問題を足すと以降の番号はずれる。
+ * 回答履歴は id で持つので、番号がずれても記録は失われない。
+ */
+export type QuestionNumber = number;
+
 /** GET /exams/{category}/{exam}/questions */
 export interface QuestionListResponse {
   exam: ExamSummary;
   mastery: MasteryCounts;
-  questions: QuestionProgress[];
+  questions: (QuestionProgress & { number: QuestionNumber })[];
 }
 
 /** GET /exams/{category}/{exam}/questions/{id}（正解・解説は含まない） */
 export interface QuestionDetailResponse {
   id: string;
+  number: QuestionNumber;
+  /** 資格の問題数 */
+  total: number;
   question: string;
   choices: string[];
   /** 選ぶべき選択肢の数 */

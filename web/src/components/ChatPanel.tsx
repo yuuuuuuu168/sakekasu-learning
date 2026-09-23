@@ -25,11 +25,21 @@ interface Props {
   category: string;
   exam: string;
   questionId: string;
+  questionNumber: number;
   displayOrder: number[];
   selected: number[];
 }
 
-export function ChatPanel({ open, onClose, category, exam, questionId, displayOrder, selected }: Props) {
+export function ChatPanel({
+  open,
+  onClose,
+  category,
+  exam,
+  questionId,
+  questionNumber,
+  displayOrder,
+  selected,
+}: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -118,7 +128,7 @@ export function ChatPanel({ open, onClose, category, exam, questionId, displayOr
             <div>
               <p className="text-sm font-semibold">AI に相談</p>
               <p className="text-xs text-slate-500">
-                {questionId}・{answered ? '回答済み' : '未回答（答えは伏せてヒントを出します）'}
+                問{questionNumber}・{answered ? '回答済み' : '未回答（答えは伏せてヒントを出します）'}
               </p>
             </div>
           </div>

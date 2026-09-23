@@ -72,9 +72,9 @@ async function requireExam(event: Event) {
 async function requireQuestion(event: Event) {
   const ctx = await requireExam(event);
   const id = pathParam(event, 'id', QUESTION_ID);
-  const question = ctx.file.questions.find((q) => q.id === id);
-  if (!question) throw new HttpError(404, '問題が見つかりません');
-  return { ...ctx, id, question };
+  const index = ctx.file.questions.findIndex((q) => q.id === id);
+  if (index < 0) throw new HttpError(404, '問題が見つかりません');
+  return { ...ctx, id, question: ctx.file.questions[index], number: index + 1 };
 }
 
 async function getCatalog(userId: string): Promise<CatalogResponse> {
@@ -115,19 +115,21 @@ async function getQuestionList(event: Event, userId: string): Promise<QuestionLi
   };
 
   const mastery = emptyMasteryCounts();
-  const questions = file.questions.map((q) => {
+  const questions = file.questions.map((q, i) => {
     const progress = toProgress(q.id, progressMap.get(q.id));
     mastery[progress.mastery]++;
-    return progress;
+    return { ...progress, number: i + 1 };
   });
   return { exam: summary, mastery, questions };
 }
 
 async function getQuestion(event: Event, userId: string): Promise<QuestionDetailResponse> {
-  const { category, exam, id, question } = await requireQuestion(event);
+  const { category, exam, file, id, question, number } = await requireQuestion(event);
   const item = await getProgress(userId, category, exam, id);
   return {
     id,
+    number,
+    total: file.questions.length,
     question: question.question,
     choices: question.choices,
     selectCount: question.answers.length,

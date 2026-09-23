@@ -90,6 +90,9 @@ describe('API', () => {
     const { status, body } = await call(event('GET /exams/{category}/{exam}/questions/{id}', q('Q-2')));
     expect(status).toBe(200);
     expect(body.selectCount).toBe(2);
+    // 画面用の通し番号（管理用の id とは別）
+    expect(body.number).toBe(2);
+    expect(body.total).toBe(2);
     expect(body).not.toHaveProperty('answers');
     expect(body).not.toHaveProperty('explanations');
   });
@@ -110,6 +113,10 @@ describe('API', () => {
 
     const list = await call(event('GET /exams/{category}/{exam}/questions', q('')));
     expect(list.body.mastery).toEqual({ mastered: 1, shaky: 0, weak: 1, unanswered: 0 });
+    expect(list.body.questions.map((x: { id: string; number: number }) => [x.id, x.number])).toEqual([
+      ['Q-1', 1],
+      ['Q-2', 2],
+    ]);
   });
 
   it('不正な回答は 400', async () => {

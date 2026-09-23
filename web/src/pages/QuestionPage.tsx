@@ -110,7 +110,10 @@ export function QuestionPage() {
 
       <article className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-sm font-semibold text-slate-500">{question.id}</span>
+          <span className="text-sm font-semibold text-slate-500">
+            問{question.number}
+            <span className="font-normal text-slate-400"> / {question.total}</span>
+          </span>
           <MasteryChip mastery={(result?.progress ?? question.progress).mastery} />
           {multi && (
             <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
@@ -242,6 +245,7 @@ export function QuestionPage() {
         category={category}
         exam={exam}
         questionId={id}
+        questionNumber={question.number}
         displayOrder={displayOrder}
         selected={result ? selected : []}
       />
