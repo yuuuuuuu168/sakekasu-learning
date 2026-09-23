@@ -85,7 +85,10 @@ describe('stacks', () => {
       AuthorizerConfiguration: {
         CustomJWTAuthorizer: Match.objectLike({ AllowedClients: Match.anyValue() }),
       },
-      EnvironmentVariables: Match.objectLike({ MODEL_ID: 'global.anthropic.claude-sonnet-5' }),
+      EnvironmentVariables: Match.objectLike({
+        MODEL_ID: 'global.anthropic.claude-sonnet-5',
+        FALLBACK_MODEL_ID: 'jp.anthropic.claude-opus-5-5',
+      }),
       AgentRuntimeArtifact: {
         CodeConfiguration: Match.objectLike({ Runtime: 'PYTHON_3_13', EntryPoint: ['main.py'] }),
       },

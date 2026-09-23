@@ -31,6 +31,8 @@ log = logging.getLogger("tutor")
 app = BedrockAgentCoreApp()
 
 MODEL_ID = os.environ.get("MODEL_ID", "global.anthropic.claude-sonnet-5")
+# MODEL_ID が応答を1文字も返さないうちに失敗したときに使うモデル（空なら切り替えない）
+FALLBACK_MODEL_ID = os.environ.get("FALLBACK_MODEL_ID", "jp.anthropic.claude-opus-5-5")
 AWS_KNOWLEDGE_MCP_URL = os.environ.get("AWS_KNOWLEDGE_MCP_URL", "https://knowledge-mcp.global.api.aws")
 DOC_TOOLS = [
     "aws___search_documentation",
@@ -89,7 +91,7 @@ def _sanitize_history(history: Any) -> list[dict[str, Any]]:
     return messages
 
 
-def _build_agent(ctx: QuestionContext, history: list[dict[str, Any]]) -> Agent:
+def _build_agent(ctx: QuestionContext, history: list[dict[str, Any]], model_id: str = MODEL_ID) -> Agent:
     docs = MCPClient(
         url=AWS_KNOWLEDGE_MCP_URL,
         tool_filters={"allowed": DOC_TOOLS},
@@ -103,7 +105,7 @@ def _build_agent(ctx: QuestionContext, history: list[dict[str, Any]]) -> Agent:
         question=render_question(ctx),
     )
     return Agent(
-        model=BedrockModel(model_id=MODEL_ID, max_tokens=4096),
+        model=BedrockModel(model_id=model_id, max_tokens=4096),
         system_prompt=system_prompt,
         tools=[docs],
         messages=history,
@@ -138,16 +140,27 @@ async def invoke(payload: Any, context: Any):
         yield ctx
         return
 
-    agent = _build_agent(ctx, _sanitize_history(payload.get("history")))
     log.info("相談を受け付けました question=%s answered=%s", ctx.question_id, bool(ctx.selected))
-    try:
-        async for event in agent.stream_async(prompt):
-            data = event.get("data") if isinstance(event, dict) else None
-            if isinstance(data, str):
-                yield data
-    except Exception:
-        log.exception("エージェントの実行に失敗しました")
-        yield "\n\n（応答の生成中にエラーが発生しました。時間をおいてもう一度お試しください）"
+    models = [m for m in dict.fromkeys([MODEL_ID, FALLBACK_MODEL_ID]) if m]
+    for i, model_id in enumerate(models):
+        # 会話履歴は Agent が書き換えるため、モデルごとに作り直す
+        agent = _build_agent(ctx, _sanitize_history(payload.get("history")), model_id)
+        started = False
+        try:
+            async for event in agent.stream_async(prompt):
+                data = event.get("data") if isinstance(event, dict) else None
+                if isinstance(data, str):
+                    started = True
+                    yield data
+            return
+        except Exception:
+            log.exception("エージェントの実行に失敗しました model=%s", model_id)
+            # 途中まで返した後に別モデルでやり直すと文章が重複するため、切り替えるのは
+            # まだ何も返していないときだけにする
+            if started or i == len(models) - 1:
+                yield "\n\n（応答の生成中にエラーが発生しました。時間をおいてもう一度お試しください）"
+                return
+            log.warning("次のモデルで再試行します model=%s", models[i + 1])
 
 
 if __name__ == "__main__":

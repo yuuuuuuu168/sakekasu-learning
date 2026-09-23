@@ -22,12 +22,15 @@ export function QuestionPage() {
   const [result, setResult] = useState<AnswerResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  /** 開いている解説（原本の index）。最初はすべて閉じておく */
+  const [openExplanations, setOpenExplanations] = useState<Set<number>>(new Set());
 
   const load = useCallback(() => {
     setQuestion(null);
     setError(null);
     setResult(null);
     setSelected([]);
+    setOpenExplanations(new Set());
     setChatOpen(false);
     api.question(category, exam, id).then(
       (q) => {
@@ -74,9 +77,48 @@ export function QuestionPage() {
   const retry = () => {
     setResult(null);
     setSelected([]);
+    setOpenExplanations(new Set());
     setDisplayOrder(shuffledOrder(question.choices.length));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const toggleExplanation = (original: number) =>
+    setOpenExplanations((prev) => {
+      const next = new Set(prev);
+      if (next.has(original)) next.delete(original);
+      else next.add(original);
+      return next;
+    });
+  const allOpen = openExplanations.size === displayOrder.length;
+
+  // 解説の上と下の両方に置く（解説を読まずに進むときも、読み終えてからも押しやすいように）
+  const actions = (
+    <div className="flex flex-col gap-2 sm:flex-row">
+      <button
+        onClick={retry}
+        className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
+      >
+        <RotateCcw className="size-4" />
+        もう一度解く
+      </button>
+      {session.next ? (
+        <button
+          onClick={() => navigate(`${examPath}/q/${encodeURIComponent(session.next!)}`)}
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700"
+        >
+          次の問題へ
+          <ArrowRight className="size-4" />
+        </button>
+      ) : (
+        <Link
+          to={examPath}
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700"
+        >
+          {session.position ? 'おつかれさまでした！一覧へ戻る' : '問題一覧へ'}
+        </Link>
+      )}
+    </div>
+  );
 
   const choiceState = (original: number) => {
     const picked = selected.includes(original);
@@ -179,54 +221,54 @@ export function QuestionPage() {
             </div>
           </div>
 
-          <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 font-semibold [&::-webkit-details-marker]:hidden">
-              解説を表示
-              <ChevronDown className="size-5 text-slate-400 transition group-open:rotate-180" />
-            </summary>
-            <div className="space-y-5 border-t border-slate-100 p-4">
-              {displayOrder.map((original, pos) => {
-                const correct = result.answers.includes(original);
-                return (
-                  <section key={original} className="space-y-2">
-                    <h3 className="flex items-center gap-2 font-semibold">
-                      <span className={`rounded-md px-2 py-0.5 text-xs text-white ${correct ? 'bg-emerald-600' : 'bg-slate-400'}`}>
-                        {correct ? '正解' : '不正解'}
-                      </span>
-                      選択肢 {LABELS[pos]}
-                    </h3>
-                    <Markdown className="prose-sm">{relabel(result.explanations[original], displayOrder)}</Markdown>
-                  </section>
-                );
-              })}
-            </div>
-          </details>
+          {actions}
 
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              onClick={retry}
-              className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
-            >
-              <RotateCcw className="size-4" />
-              もう一度解く
-            </button>
-            {session.next ? (
+          <section className="space-y-2">
+            <div className="flex items-center justify-between gap-2 px-1">
+              <h2 className="font-semibold">解説</h2>
               <button
-                onClick={() => navigate(`${examPath}/q/${encodeURIComponent(session.next!)}`)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700"
+                onClick={() =>
+                  setOpenExplanations(allOpen ? new Set() : new Set(displayOrder))
+                }
+                className="text-sm text-indigo-600 hover:underline"
               >
-                次の問題へ
-                <ArrowRight className="size-4" />
+                {allOpen ? 'すべて閉じる' : 'すべて開く'}
               </button>
-            ) : (
-              <Link
-                to={examPath}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700"
-              >
-                {session.position ? 'おつかれさまでした！一覧へ戻る' : '問題一覧へ'}
-              </Link>
-            )}
-          </div>
+            </div>
+            {displayOrder.map((original, pos) => {
+              const correct = result.answers.includes(original);
+              const open = openExplanations.has(original);
+              return (
+                <div key={original} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <button
+                    onClick={() => toggleExplanation(original)}
+                    aria-expanded={open}
+                    className="flex w-full items-center gap-2 p-4 text-left"
+                  >
+                    <span
+                      className={`rounded-md px-2 py-0.5 text-xs font-semibold text-white ${correct ? 'bg-emerald-600' : 'bg-slate-400'}`}
+                    >
+                      {correct ? '正解' : '不正解'}
+                    </span>
+                    <span className="font-semibold">選択肢 {LABELS[pos]}</span>
+                    {selected.includes(original) && (
+                      <span className="text-xs text-slate-500">（あなたの回答）</span>
+                    )}
+                    <ChevronDown
+                      className={`ml-auto size-5 shrink-0 text-slate-400 transition ${open ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  {open && (
+                    <div className="border-t border-slate-100 p-4">
+                      <Markdown className="prose-sm">{relabel(result.explanations[original], displayOrder)}</Markdown>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </section>
+
+          {actions}
         </>
       )}
 

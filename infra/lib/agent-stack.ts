@@ -15,10 +15,14 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const AGENT_PACKAGE_DIR = path.resolve(here, '../../agent/dist/package');
 
 /**
- * 既定のモデル。東京リージョンでは Sonnet 5 に jp の Geo プロファイルが無いため Global を使う。
- * 国内にとどめたい場合は `-c agentModelId=jp.anthropic.claude-sonnet-4-6` で切り替える。
+ * 既定のモデル。Sonnet 5 を優先し、応答前に失敗したら Opus 5.5 で答え直す。
+ * - Sonnet 5 は東京からは Global プロファイルしか無い
+ * - Opus 5.5 は国内（jp）プロファイルがある
+ * どちらも Bedrock のモデル利用契約（create-foundation-model-agreement）が必要。
+ * `-c agentModelId=...` / `-c agentFallbackModelId=...` で切り替えられる。
  */
 export const DEFAULT_MODEL_ID = 'global.anthropic.claude-sonnet-5';
+export const DEFAULT_FALLBACK_MODEL_ID = 'jp.anthropic.claude-opus-5-5';
 
 /** AWS 公式ドキュメントを検索・参照できるリモート MCP サーバー（認証不要） */
 export const AWS_KNOWLEDGE_MCP_URL = 'https://knowledge-mcp.global.api.aws';
@@ -29,6 +33,7 @@ export interface AgentStackProps extends StackProps {
   userPoolClient: cognito.IUserPoolClient;
   questionsBucket: s3.IBucket;
   modelId?: string;
+  fallbackModelId?: string;
 }
 
 /**
@@ -44,6 +49,7 @@ export class AgentStack extends Stack {
     super(scope, id, props);
     const { envName, userPool, userPoolClient, questionsBucket } = props;
     const modelId = props.modelId ?? DEFAULT_MODEL_ID;
+    const fallbackModelId = props.fallbackModelId ?? DEFAULT_FALLBACK_MODEL_ID;
 
     if (!existsSync(path.join(AGENT_PACKAGE_DIR, 'main.py'))) {
       throw new Error(
@@ -166,6 +172,7 @@ export class AgentStack extends Stack {
       lifecycleConfiguration: { idleRuntimeSessionTimeout: 300, maxLifetime: 3600 },
       environmentVariables: {
         MODEL_ID: modelId,
+        FALLBACK_MODEL_ID: fallbackModelId,
         QUESTIONS_BUCKET_NAME: questionsBucket.bucketName,
         COGNITO_USER_POOL_ID: userPool.userPoolId,
         COGNITO_CLIENT_ID: userPoolClient.userPoolClientId,

@@ -121,8 +121,18 @@ AWS_PROFILE=sakekasu-builder npx cdk deploy sakekasu-learning-github-oidc -c git
 
 ### Bedrock のモデル
 
-既定は `global.anthropic.claude-sonnet-5`（東京リージョンからは Sonnet 5 に jp の Geo プロファイルが無いため Global）。
-データを国内にとどめたい場合は `infra/cdk.json` の context に `"agentModelId": "jp.anthropic.claude-sonnet-4-6"` を足す。
+既定は Sonnet 5（`global.anthropic.claude-sonnet-5`、東京からは Global プロファイルのみ）。
+応答を返し始める前に失敗したときは Opus 5.5（`jp.anthropic.claude-opus-5-5`、国内プロファイル）で答え直す。
+`infra/cdk.json` の context の `agentModelId` / `agentFallbackModelId` で変更できる。
+
+Bedrock の Anthropic の新しいモデルは、モデルごとに利用契約が必要（未契約だと `AccessDeniedException: ... is not available for this account`）。
+
+```bash
+M=anthropic.claude-sonnet-5
+T=$(AWS_PROFILE=sakekasu-builder aws bedrock list-foundation-model-agreement-offers --model-id $M --query 'offers[0].offerToken' --output text)
+AWS_PROFILE=sakekasu-builder aws bedrock create-foundation-model-agreement --model-id $M --offer-token "$T"
+AWS_PROFILE=sakekasu-builder aws bedrock get-foundation-model-availability --model-id $M   # agreementAvailability が AVAILABLE になれば利用可
+```
 
 ## ユーザーの招待
 

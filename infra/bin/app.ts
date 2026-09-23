@@ -45,6 +45,7 @@ if (app.node.tryGetContext('github-oidc') === 'true') {
     userPoolClient: auth.userPoolClient,
     questionsBucket: backend.questionsBucket,
     modelId: app.node.tryGetContext('agentModelId'),
+    fallbackModelId: app.node.tryGetContext('agentFallbackModelId'),
   });
 
   new WebStack(app, `${prefix}-web`, {
