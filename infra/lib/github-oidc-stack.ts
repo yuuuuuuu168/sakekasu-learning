@@ -4,7 +4,12 @@ import type { Construct } from 'constructs';
 
 export interface GithubOidcStackProps extends StackProps {
   envName: string;
-  repository: string;
+  /**
+   * OIDC トークンの sub の接頭辞。このリポジトリは GitHub の immutable subject が有効なため、
+   * `repo:<owner>@<owner_id>/<repo>@<repo_id>` の形になる（リポジトリ名の変更や同名での
+   * 作り直しでは一致しない）。確認: gh api repos/<owner>/<repo>/actions/oidc/customization/sub
+   */
+  subjectPrefix: string;
   /** CloudFront / ACM を置くリージョン */
   webRegion: string;
 }
@@ -22,7 +27,7 @@ export interface GithubOidcStackProps extends StackProps {
 export class GithubOidcStack extends Stack {
   constructor(scope: Construct, id: string, props: GithubOidcStackProps) {
     super(scope, id, props);
-    const { envName, repository, webRegion } = props;
+    const { envName, subjectPrefix, webRegion } = props;
 
     const provider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(
       this,
@@ -41,7 +46,7 @@ export class GithubOidcStack extends Stack {
     const deployRole = new iam.Role(this, 'DeployRole', {
       roleName: 'sakekasu-learning-github-actions-deploy',
       description: 'GitHub Actions deploy role for sakekasu-learning (main branch only)',
-      assumedBy: principal(`repo:${repository}:ref:refs/heads/main`),
+      assumedBy: principal(`${subjectPrefix}:ref:refs/heads/main`),
       maxSessionDuration: Duration.hours(1),
     });
     deployRole.addToPolicy(
@@ -89,7 +94,7 @@ export class GithubOidcStack extends Stack {
     const diffRole = new iam.Role(this, 'DiffRole', {
       roleName: 'sakekasu-learning-github-actions-diff',
       description: 'GitHub Actions cdk diff role for sakekasu-learning (pull requests only)',
-      assumedBy: principal(`repo:${repository}:pull_request`),
+      assumedBy: principal(`${subjectPrefix}:pull_request`),
       maxSessionDuration: Duration.hours(1),
     });
     diffRole.addToPolicy(
