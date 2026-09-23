@@ -74,6 +74,8 @@ SERVICES = {
     "sso": ("single_sign_on", "#DD344C"), "acm": ("certificate_manager", "#DD344C"),
     "waf": ("waf", "#DD344C"), "macie": ("macie", "#DD344C"),
     "ram": ("resource_access_manager", "#DD344C"),
+    # フロントエンド・モバイル
+    "device_farm": ("device_farm", "#DD344C"),
     # 分析
     "kinesis": ("kinesis", "#8C4FFF"), "kinesis_streams": ("kinesis_data_streams", "#8C4FFF"),
     "firehose": ("kinesis_data_firehose", "#8C4FFF"), "athena": ("athena", "#8C4FFF"),
@@ -87,6 +89,7 @@ RESOURCES = {
     "user": ("user", "#232F3E", 40, 40),
     "users": ("users", "#232F3E", 48, 48),
     "client": ("client", "#232F3E", 48, 48),
+    "mobile_client": ("mobile_client", "#232F3E", 30, 48),
     "server": ("traditional_server", "#232F3E", 36, 48),
     "datacenter": ("corporate_data_center", "#232F3E", 48, 48),
     "instances": ("instances", "#ED7100", 48, 48),
