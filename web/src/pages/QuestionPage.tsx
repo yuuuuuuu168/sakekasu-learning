@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Check, ChevronDown, MessageCircle, RotateCcw, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Image as ImageIcon, MessageCircle, RotateCcw, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { AnswerResponse, QuestionDetailResponse } from '../../../shared/types';
@@ -9,6 +9,9 @@ import { ErrorMessage, Loading } from '../components/Status';
 import { api } from '../lib/api';
 import { LABELS, relabel, shuffledOrder } from '../lib/choices';
 import { nextInSession } from '../lib/study-session';
+
+/** 開閉状態の管理で、図解を選択肢の index と区別するためのキー */
+const DIAGRAM_KEY = -1;
 
 export function QuestionPage() {
   const { category = '', exam = '', id = '' } = useParams();
@@ -22,8 +25,9 @@ export function QuestionPage() {
   const [result, setResult] = useState<AnswerResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  /** 開いている解説（原本の index）。最初はすべて閉じておく */
+  /** 開いている解説（原本の index。図解は DIAGRAM_KEY）。最初はすべて閉じておく */
   const [openExplanations, setOpenExplanations] = useState<Set<number>>(new Set());
+  const [diagramZoomed, setDiagramZoomed] = useState(false);
 
   const load = useCallback(() => {
     setQuestion(null);
@@ -31,6 +35,7 @@ export function QuestionPage() {
     setResult(null);
     setSelected([]);
     setOpenExplanations(new Set());
+    setDiagramZoomed(false);
     setChatOpen(false);
     api.question(category, exam, id).then(
       (q) => {
@@ -89,7 +94,8 @@ export function QuestionPage() {
       else next.add(original);
       return next;
     });
-  const allOpen = openExplanations.size === displayOrder.length;
+  const explanationKeys = result?.diagram ? [DIAGRAM_KEY, ...displayOrder] : displayOrder;
+  const allOpen = openExplanations.size === explanationKeys.length;
 
   // 解説の上と下の両方に置く（解説を読まずに進むときも、読み終えてからも押しやすいように）
   const actions = (
@@ -228,13 +234,39 @@ export function QuestionPage() {
               <h2 className="font-semibold">解説</h2>
               <button
                 onClick={() =>
-                  setOpenExplanations(allOpen ? new Set() : new Set(displayOrder))
+                  setOpenExplanations(allOpen ? new Set() : new Set(explanationKeys))
                 }
                 className="text-sm text-indigo-600 hover:underline"
               >
                 {allOpen ? 'すべて閉じる' : 'すべて開く'}
               </button>
             </div>
+            {result.diagram && (
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <button
+                  onClick={() => toggleExplanation(DIAGRAM_KEY)}
+                  aria-expanded={openExplanations.has(DIAGRAM_KEY)}
+                  className="flex w-full items-center gap-2 p-4 text-left"
+                >
+                  <span className="flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-0.5 text-xs font-semibold text-white">
+                    <ImageIcon className="size-3.5" />
+                    図解
+                  </span>
+                  <span className="font-semibold">構成と流れ</span>
+                  <ChevronDown
+                    className={`ml-auto size-5 shrink-0 text-slate-400 transition ${openExplanations.has(DIAGRAM_KEY) ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {openExplanations.has(DIAGRAM_KEY) && (
+                  <div className="border-t border-slate-100 p-3">
+                    <button onClick={() => setDiagramZoomed(true)} className="block w-full cursor-zoom-in" aria-label="図解を拡大表示">
+                      <img src={result.diagram} alt={`問${question.number}の図解`} className="w-full rounded-lg" />
+                    </button>
+                    <p className="mt-1 text-center text-xs text-slate-400">クリックで拡大</p>
+                  </div>
+                )}
+              </div>
+            )}
             {displayOrder.map((original, pos) => {
               const correct = result.answers.includes(original);
               const open = openExplanations.has(original);
@@ -279,6 +311,24 @@ export function QuestionPage() {
         <MessageCircle className="size-5" />
         AI に相談
       </button>
+
+      {diagramZoomed && result?.diagram && (
+        <div
+          role="dialog"
+          aria-label="図解の拡大表示"
+          onClick={() => setDiagramZoomed(false)}
+          className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-slate-900/80 p-2 sm:p-6"
+        >
+          <img src={result.diagram} alt={`問${question.number}の図解`} className="max-h-full max-w-full rounded-lg bg-white" />
+          <button
+            onClick={() => setDiagramZoomed(false)}
+            className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-slate-700"
+            aria-label="閉じる"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+      )}
 
       <ChatPanel
         key={`${id}:${displayOrder.join(',')}`}

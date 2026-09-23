@@ -9,7 +9,7 @@ const exam: ExamFile = {
   code: 'DOP-C02',
   questions: [
     { id: 'Q-1', question: '問1', choices: ['a', 'b', 'c', 'd'], answers: [2], explanations: ['1', '2', '3', '4'] },
-    { id: 'Q-2', question: '問2（2 つ選択）', choices: ['a', 'b', 'c', 'd', 'e'], answers: [0, 3], explanations: ['1', '2', '3', '4', '5'] },
+    { id: 'Q-2', question: '問2（2 つ選択）', choices: ['a', 'b', 'c', 'd', 'e'], answers: [0, 3], explanations: ['1', '2', '3', '4', '5'], hasDiagram: true },
   ],
 };
 
@@ -17,6 +17,7 @@ const store = new Map<string, { history: boolean[]; attempts: number; qkey: stri
 
 vi.mock('../lambda/api/questions', () => ({
   loadExam: async (c: string, e: string) => (c === 'aws' && e === 'dop-c02' ? exam : null),
+  loadDiagram: async (_c: string, _e: string, id: string) => `data:image/png;base64,${id}`,
   loadCatalog: async () => ({
     generatedAt: '',
     categories: [
@@ -95,6 +96,7 @@ describe('API', () => {
     expect(body.total).toBe(2);
     expect(body).not.toHaveProperty('answers');
     expect(body).not.toHaveProperty('explanations');
+    expect(body).not.toHaveProperty('diagram');
   });
 
   it('採点して履歴を記録し、2回連続正解でバッチリになる', async () => {
@@ -102,6 +104,8 @@ describe('API', () => {
     const first = await call(event(route, q('Q-2'), { selected: [3, 0] }));
     expect(first.body.correct).toBe(true);
     expect(first.body.answers).toEqual([0, 3]);
+    // 図解は回答後にだけ返す。図解の無い問題では返さない
+    expect(first.body.diagram).toBe('data:image/png;base64,Q-2');
     expect(first.body.progress.mastery).toBe('shaky');
 
     const second = await call(event(route, q('Q-2'), { selected: [0, 3] }));
@@ -110,6 +114,7 @@ describe('API', () => {
     const wrong = await call(event(route, q('Q-1'), { selected: [0] }));
     expect(wrong.body.correct).toBe(false);
     expect(wrong.body.progress.mastery).toBe('weak');
+    expect(wrong.body).not.toHaveProperty('diagram');
 
     const list = await call(event('GET /exams/{category}/{exam}/questions', q('')));
     expect(list.body.mastery).toEqual({ mastered: 1, shaky: 0, weak: 1, unanswered: 0 });

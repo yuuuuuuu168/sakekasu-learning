@@ -36,3 +36,17 @@ export async function loadCatalog(): Promise<Catalog> {
 export async function loadExam(category: string, exam: string): Promise<ExamFile | null> {
   return getJson<ExamFile>(`${category}/${exam}.json`);
 }
+
+/** 解説用の図解を data URL で返す。回答後にだけ返すため、公開の配信には置かない */
+export async function loadDiagram(category: string, exam: string, id: string): Promise<string | undefined> {
+  try {
+    const res = await s3.send(
+      new GetObjectCommand({ Bucket: BUCKET, Key: `${category}/${exam}/diagrams/${id}.png` }),
+    );
+    const bytes = await res.Body!.transformToByteArray();
+    return `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`;
+  } catch (err) {
+    if (err instanceof NoSuchKey) return undefined;
+    throw err;
+  }
+}

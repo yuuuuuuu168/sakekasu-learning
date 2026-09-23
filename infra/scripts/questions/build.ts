@@ -4,16 +4,18 @@
  *   content/<category>/category.json      分野のメタ情報（AWS, OCI, Terraform ...）
  *   content/<category>/<exam>/exam.json   資格のメタ情報
  *   content/<category>/<exam>/*.md        問題メモ（複数ファイル可）
+ *   content/<category>/<exam>/diagrams/<問題番号>.drawio.png  解説用の図解（任意。draw.io のデータ入り PNG）
  *
  * 出力:
  *   build/questions/catalog.json
  *   build/questions/<category>/<exam>.json
+ *   build/questions/<category>/<exam>/diagrams/<問題番号>.png
  *
  * 出力は非公開の S3 バケットへ同期し、API Lambda と AI チャットだけが読む。
  * 使い方: npx tsx scripts/questions/build.ts [--check]
  *   --check  出力せずに形式チェックだけ行う（CI の PR チェック用）
  */
-import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Catalog, CategorySummary, ExamFile } from '../../../shared/types';
@@ -59,6 +61,7 @@ const collator = new Intl.Collator('ja', { numeric: true });
 export function buildQuestions(contentDir = CONTENT_DIR) {
   const categories: CategorySummary[] = [];
   const exams: ExamFile[] = [];
+  const diagrams: { category: string; exam: string; file: string; source: string }[] = [];
 
   for (const category of subdirs(contentDir)) {
     const categoryDir = join(contentDir, category);
@@ -88,6 +91,18 @@ export function buildQuestions(contentDir = CONTENT_DIR) {
       }
       questions.sort((a, b) => collator.compare(a.id, b.id));
 
+      const diagramDir = join(examDir, 'diagrams');
+      const diagramFiles = existsSync(diagramDir)
+        ? readdirSync(diagramDir).filter((f) => f.endsWith('.drawio.png'))
+        : [];
+      for (const file of diagramFiles) {
+        const id = file.slice(0, -'.drawio.png'.length);
+        const question = questions.find((q) => q.id === id);
+        if (!question) throw new Error(`${category}/${exam}/diagrams/${file}: 問題番号 ${id} の問題がありません`);
+        question.hasDiagram = true;
+      }
+      diagrams.push(...diagramFiles.map((file) => ({ category, exam, file, source: join(diagramDir, file) })));
+
       exams.push({ category, exam, name: examMeta.name, code: examMeta.code, questions });
       summary.exams.push({
         category,
@@ -104,12 +119,12 @@ export function buildQuestions(contentDir = CONTENT_DIR) {
   categories.sort((a, b) => a.order - b.order || a.category.localeCompare(b.category));
 
   const catalog: Catalog = { generatedAt: new Date().toISOString(), categories };
-  return { catalog, exams };
+  return { catalog, exams, diagrams };
 }
 
 function main() {
   const checkOnly = process.argv.includes('--check');
-  const { catalog, exams } = buildQuestions();
+  const { catalog, exams, diagrams } = buildQuestions();
 
   for (const c of catalog.categories) {
     for (const e of c.exams) console.log(`${c.category}/${e.exam}: ${e.questionCount} 問`);
@@ -123,6 +138,12 @@ function main() {
     mkdirSync(join(OUT_DIR, e.category), { recursive: true });
     writeFileSync(join(OUT_DIR, e.category, `${e.exam}.json`), JSON.stringify(e));
   }
+  for (const d of diagrams) {
+    const dir = join(OUT_DIR, d.category, d.exam, 'diagrams');
+    mkdirSync(dir, { recursive: true });
+    copyFileSync(d.source, join(dir, d.file.replace(/\.drawio\.png$/, '.png')));
+  }
+  if (diagrams.length > 0) console.log(`図解: ${diagrams.length} 件`);
   console.log(`出力先: ${OUT_DIR}`);
 }
 

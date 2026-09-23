@@ -73,8 +73,12 @@ jobs:
 
       - name: 問題データの同期
         run: |
-          aws s3 sync build/questions "s3://sakekasu-learning-${ENV_NAME}-questions-${AWS_ACCOUNT_ID}/" \
-            --delete --content-type application/json --cache-control no-store
+          DEST="s3://sakekasu-learning-${ENV_NAME}-questions-${AWS_ACCOUNT_ID}/"
+          # JSON と図解（PNG）で Content-Type を分けて同期する
+          aws s3 sync build/questions "$DEST" --delete --exclude "*.png" \
+            --content-type application/json --cache-control no-store
+          aws s3 sync build/questions "$DEST" --delete --exclude "*" --include "*.png" \
+            --content-type image/png --cache-control no-store
 
       - name: config.json の生成
         working-directory: infra

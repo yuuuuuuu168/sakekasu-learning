@@ -31,7 +31,7 @@ import {
   resetExamProgress,
   toProgress,
 } from './progress';
-import { loadCatalog, loadExam } from './questions';
+import { loadCatalog, loadDiagram, loadExam } from './questions';
 
 type Event = APIGatewayProxyEventV2WithJWTAuthorizer;
 
@@ -164,11 +164,15 @@ async function postAnswer(event: Event, userId: string): Promise<AnswerResponse>
     : event.body;
   const selected = parseAnswer(body, question.choices.length);
   const correct = isCorrect(selected, question.answers);
-  const item = await recordAnswer(userId, category, exam, id, correct, selected);
+  const [item, diagram] = await Promise.all([
+    recordAnswer(userId, category, exam, id, correct, selected),
+    question.hasDiagram ? loadDiagram(category, exam, id) : Promise.resolve(undefined),
+  ]);
   return {
     correct,
     answers: question.answers,
     explanations: question.explanations,
+    diagram,
     progress: toProgress(id, item),
   };
 }
