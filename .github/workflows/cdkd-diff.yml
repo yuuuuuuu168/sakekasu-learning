@@ -42,8 +42,10 @@ jobs:
       - id: diff
         run: |
           set +e
-          NO_COLOR=1 bash scripts/cdkd-stacks.sh preview > diff.txt 2>&1
+          bash scripts/cdkd-stacks.sh preview > raw.txt 2>&1
           echo "exit=$?" >> "$GITHUB_OUTPUT"
+          # cdkd は NO_COLOR でも色のエスケープシーケンスを出すので、コメントに載せる前に落とす
+          sed -E 's/\x1b\[[0-9;]*m//g' raw.txt > diff.txt
       - uses: actions/github-script@v9
         with:
           script: |
