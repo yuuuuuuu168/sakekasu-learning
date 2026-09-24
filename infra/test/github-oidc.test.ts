@@ -46,19 +46,24 @@ describe('github-oidc', () => {
     });
   });
 
-  it('diff ロールには回答履歴と問題データを読ませない', () => {
-    t.hasResourceProperties('AWS::IAM::Policy', {
-      PolicyDocument: {
-        Statement: Match.arrayWith([
-          Match.objectLike({ Sid: 'DenyDataRead', Effect: 'Deny', Action: Match.arrayWith(['dynamodb:Scan']) }),
-          Match.objectLike({
-            Sid: 'DenyQuestionData',
-            Effect: 'Deny',
-            Resource: `arn:aws:s3:::sakekasu-learning-test-questions-${account}/*`,
-          }),
-        ]),
-      },
-    });
+  it('diff ロールは cdkd の状態のうち、このアプリの分だけを読める', () => {
+    const [role] = Object.values(
+      t.findResources('AWS::IAM::Role', { Properties: { RoleName: 'sakekasu-learning-github-actions-diff' } }),
+    );
+    expect(role.Properties.ManagedPolicyArns).toBeUndefined();
+    const policies = Object.values(t.findResources('AWS::IAM::Policy')).filter((p) =>
+      JSON.stringify(p.Properties.Roles).includes('DiffRole'),
+    );
+    const statements = policies.flatMap((p) => p.Properties.PolicyDocument.Statement);
+    const actions = statements.flatMap((s) => [s.Action].flat());
+    // 書き込みの権限は持たない
+    expect(actions.filter((a: string) => !/:(Get|List|Describe)/.test(a))).toEqual([]);
+    const read = statements.find((s) => s.Sid === 'ReadCdkdState');
+    expect(read.Resource).toEqual([
+      `arn:aws:s3:::cdkd-state-${account}/cdkd/sakekasu-learning-test-*`,
+      `arn:aws:s3:::cdkd-state-${account}/cdkd/_index/*`,
+      `arn:aws:s3:::cdkd-state-${account}/cdkd-bootstrap/*`,
+    ]);
   });
 
   it('IAM ロールの description は ASCII だけ（日本語だとデプロイが 400 で落ちる）', () => {

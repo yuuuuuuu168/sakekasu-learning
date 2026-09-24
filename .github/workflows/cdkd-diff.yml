@@ -1,5 +1,5 @@
 # PR で cdkd diff を実行し、結果を PR にコメントする（既存のコメントがあれば更新する）。
-# CloudFormation から未移行のスタックは、代わりに cdkd import --dry-run の結果を出す。
+# CloudFormation から未移行のスタックは、その旨だけを出す（取り込みは main へのマージ時）。
 name: cdkd-diff
 
 on:

@@ -24,9 +24,9 @@ export interface GithubOidcStackProps extends StackProps {
  *           サイト・問題データの同期、CloudFront のキャッシュ削除だけを許可する
  * - cdkd:   deploy ロールからだけ引き受けられる。cdkd は CloudFormation を通さず各サービスの API を
  *           直接呼ぶため、デプロイするリソースすべての権限が要る。CDK の cfn-exec ロールと同じく管理者権限
- * - diff:   PR でだけ使える。cdkd diff / import --dry-run 用の読み取り権限（データの中身は読ませない）
+ * - diff:   PR でだけ使える。cdkd diff 用に、このアプリの cdkd の状態だけを読める（AWS のリソースやデータは読めない）
  *
- * 移行前の cdk deploy / cdk diff が使う CDK ブートストラップロールの引き受けは、移行が済むまで残す。
+ * 移行前の cdk deploy が使う CDK ブートストラップロールの引き受けは、移行が済むまで残す。
  */
 export class GithubOidcStack extends Stack {
   constructor(scope: Construct, id: string, props: GithubOidcStackProps) {
@@ -101,9 +101,9 @@ export class GithubOidcStack extends Stack {
     );
     deployRole.addToPolicy(
       new iam.PolicyStatement({
-        // 移行スクリプトが CloudFormation のスタックが残っているかを確かめる
+        // 移行スクリプトが CloudFormation のスタックが残っているかを確かめ、取り込むリソースの物理 ID を引く
         sid: 'ReadStacks',
-        actions: ['cloudformation:DescribeStacks'],
+        actions: ['cloudformation:DescribeStacks', 'cloudformation:DescribeStackResources'],
         resources: [this.region, webRegion].map(
           (r) => `arn:aws:cloudformation:${r}:${this.account}:stack/sakekasu-learning-${envName}-*/*`,
         ),
@@ -116,61 +116,35 @@ export class GithubOidcStack extends Stack {
       assumedBy: principal(`${subjectPrefix}:pull_request`),
       maxSessionDuration: Duration.hours(1),
     });
+    // cdkd diff が読むのは、このアプリのスタックの状態と、スタック間参照の索引・資産置き場の目印だけ。
+    // 状態バケットは同じアカウントの別プロジェクトと共有しているので、読めるキーをこのアプリの分に絞る
+    const stateBucket = `cdkd-state-${this.account}`;
     diffRole.addToPolicy(
       new iam.PolicyStatement({
-        sid: 'AssumeLookupRole',
-        actions: ['sts:AssumeRole'],
-        resources: [`arn:aws:iam::${this.account}:role/cdk-hnb659fds-lookup-role-*`],
+        sid: 'ListCdkdState',
+        actions: ['s3:ListBucket', 's3:GetBucketLocation'],
+        resources: [`arn:aws:s3:::${stateBucket}`],
       }),
     );
-
-    diffRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('ReadOnlyAccess'));
     diffRole.addToPolicy(
       new iam.PolicyStatement({
-        sid: 'ReadAgentCore',
-        actions: ['bedrock-agentcore:Get*', 'bedrock-agentcore:List*'],
-        resources: ['*'],
-      }),
-    );
-    // cdkd import --dry-run も、ほかのデプロイと競合しないようにスタックのロックを取る
-    diffRole.addToPolicy(
-      new iam.PolicyStatement({
-        sid: 'CdkdStateLock',
-        actions: ['s3:PutObject', 's3:DeleteObject'],
-        resources: [`arn:aws:s3:::cdkd-state-${this.account}/cdkd/*/lock.json`],
-      }),
-    );
-    // PR から回答履歴・ユーザー・非公開の問題データ・ログを読めないようにする
-    diffRole.addToPolicy(
-      new iam.PolicyStatement({
-        sid: 'DenyDataRead',
-        effect: iam.Effect.DENY,
-        actions: [
-          'dynamodb:GetItem',
-          'dynamodb:BatchGetItem',
-          'dynamodb:Query',
-          'dynamodb:Scan',
-          'dynamodb:GetRecords',
-          'dynamodb:PartiQLSelect',
-          'dynamodb:ExportTableToPointInTime',
-          'cognito-idp:ListUsers',
-          'cognito-idp:ListUsersInGroup',
-          'cognito-idp:AdminGetUser',
-          'cognito-idp:AdminListDevices',
-          'logs:GetLogEvents',
-          'logs:FilterLogEvents',
-          'logs:StartQuery',
-          'logs:StartLiveTail',
+        sid: 'ReadCdkdState',
+        actions: ['s3:GetObject'],
+        resources: [
+          `arn:aws:s3:::${stateBucket}/cdkd/sakekasu-learning-${envName}-*`,
+          `arn:aws:s3:::${stateBucket}/cdkd/_index/*`,
+          `arn:aws:s3:::${stateBucket}/cdkd-bootstrap/*`,
         ],
-        resources: ['*'],
       }),
     );
     diffRole.addToPolicy(
       new iam.PolicyStatement({
-        sid: 'DenyQuestionData',
-        effect: iam.Effect.DENY,
-        actions: ['s3:GetObject', 's3:GetObjectVersion'],
-        resources: [`arn:aws:s3:::sakekasu-learning-${envName}-questions-${this.account}/*`],
+        // 移行スクリプトが CloudFormation のスタックが残っているかを確かめる
+        sid: 'ReadStacks',
+        actions: ['cloudformation:DescribeStacks'],
+        resources: [this.region, webRegion].map(
+          (r) => `arn:aws:cloudformation:${r}:${this.account}:stack/sakekasu-learning-${envName}-*/*`,
+        ),
       }),
     );
 

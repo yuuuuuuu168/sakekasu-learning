@@ -193,9 +193,9 @@ cd web && npm run dev
 | ワークフロー | トリガー | 内容 |
 |---|---|---|
 | `test.yml` | PR / main | 問題の形式チェック、infra / web / agent のテスト |
-| `cdkd-diff.yml` | PR（infra・agent） | `cdkd diff` を PR にコメント（未移行のスタックは `cdkd import --dry-run`） |
+| `cdkd-diff.yml` | PR（infra・agent） | `cdkd diff` を PR にコメント |
 | `deploy.yml` | main | cdkd deploy → 問題データ同期 → フロント同期 → キャッシュ削除 |
 
 AWS へは GitHub OIDC で入る。deploy ロールは main ブランチからだけ、diff ロールは PR からだけ引き受けられる。
 cdkd は deploy ロールから `sakekasu-learning-cdkd-deploy`（管理者権限。CDK の cfn-exec ロールに当たる）に切り替えてデプロイする。
-diff ロールは読み取り専用で、回答履歴・ユーザー・非公開の問題データ・ログは読めない。
+diff ロールが読めるのは、このアプリの cdkd の状態（S3）だけ。AWS のリソースやデータは読めない。
