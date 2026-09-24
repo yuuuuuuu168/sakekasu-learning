@@ -66,6 +66,10 @@ describe('github-oidc', () => {
     ]);
   });
 
+  it('deploy ロールは CDK のブートストラップロールを引き受けない（cdkd 移行後は不要）', () => {
+    expect(JSON.stringify(t.findResources('AWS::IAM::Policy'))).not.toContain('cdk-hnb659fds');
+  });
+
   it('IAM ロールの description は ASCII だけ（日本語だとデプロイが 400 で落ちる）', () => {
     const roles = Object.values(t.findResources('AWS::IAM::Role'));
     expect(roles.length).toBeGreaterThan(0);

@@ -25,8 +25,6 @@ export interface GithubOidcStackProps extends StackProps {
  * - cdkd:   deploy ロールからだけ引き受けられる。cdkd は CloudFormation を通さず各サービスの API を
  *           直接呼ぶため、デプロイするリソースすべての権限が要る。CDK の cfn-exec ロールと同じく管理者権限
  * - diff:   PR でだけ使える。cdkd diff 用に、このアプリの cdkd の状態だけを読める（AWS のリソースやデータは読めない）
- *
- * 移行前の cdk deploy が使う CDK ブートストラップロールの引き受けは、移行が済むまで残す。
  */
 export class GithubOidcStack extends Stack {
   constructor(scope: Construct, id: string, props: GithubOidcStackProps) {
@@ -53,13 +51,6 @@ export class GithubOidcStack extends Stack {
       assumedBy: principal(`${subjectPrefix}:ref:refs/heads/main`),
       maxSessionDuration: Duration.hours(1),
     });
-    deployRole.addToPolicy(
-      new iam.PolicyStatement({
-        sid: 'AssumeCdkRoles',
-        actions: ['sts:AssumeRole'],
-        resources: [`arn:aws:iam::${this.account}:role/cdk-hnb659fds-*`],
-      }),
-    );
     const cdkdRole = new iam.Role(this, 'CdkdRole', {
       roleName: 'sakekasu-learning-cdkd-deploy',
       description: 'cdkd deploy role for sakekasu-learning (assumed only by the GitHub Actions deploy role)',
