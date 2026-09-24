@@ -16,6 +16,9 @@ permissions:
 
 jobs:
   diff:
+    # PR のコードを AWS の認証情報を持った状態で実行するので、このリポジトリのブランチからの PR に限る
+    # （フォークからの PR では動かさない）
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     defaults:
       run:
