@@ -5,7 +5,8 @@
 ## 作業ルール
 
 - 作業は feature ブランチで行い、PR を作る。main へのマージは人間様が行う
-- AWS へのデプロイは main へのマージ経由（deploy.yml）だけ。ローカルからの `cdk deploy` は `sakekasu-learning-github-oidc` スタックを除き行わない
+- AWS へのデプロイは main へのマージ経由（deploy.yml）だけ。ローカルからの `cdkd deploy` / `cdk deploy` は行わない（例外は `sakekasu-learning-github-oidc` スタックの `cdk deploy`）
+- github-oidc 以外のスタックは cdkd（CloudFormation を使わない）で管理する。スタックの出力は `npx cdkd state show <スタック名> --json` で読む。cdkd のバージョンは `infra/package.json` で固定している
 - AWS CLI / CDK は `AWS_PROFILE=sakekasu-builder` を付けて実行する（アカウント 232791540685）
 
 ## 規約

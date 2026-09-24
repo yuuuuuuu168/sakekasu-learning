@@ -20,9 +20,13 @@ export interface GithubOidcStackProps extends StackProps {
  * OIDC プロバイダはアカウントに1つしか作れず、sakekasu-builder が作成済みなので import する。
  * このスタックは CI 自身の権限を定義するため、手動でデプロイする（-c github-oidc=true）。
  *
- * - deploy: main への push でだけ使える。CDK のブートストラップロールの引き受けと、
+ * - deploy: main への push でだけ使える。cdkd 用ロールの引き受けと、
  *           サイト・問題データの同期、CloudFront のキャッシュ削除だけを許可する
- * - diff:   PR でだけ使える。cdk diff 用の読み取りロールの引き受けだけを許可する
+ * - cdkd:   deploy ロールからだけ引き受けられる。cdkd は CloudFormation を通さず各サービスの API を
+ *           直接呼ぶため、デプロイするリソースすべての権限が要る。CDK の cfn-exec ロールと同じく管理者権限
+ * - diff:   PR でだけ使える。cdkd diff 用に、このアプリの cdkd の状態だけを読める（AWS のリソースやデータは読めない）
+ *
+ * 移行前の cdk deploy が使う CDK ブートストラップロールの引き受けは、移行が済むまで残す。
  */
 export class GithubOidcStack extends Stack {
   constructor(scope: Construct, id: string, props: GithubOidcStackProps) {
@@ -56,6 +60,20 @@ export class GithubOidcStack extends Stack {
         resources: [`arn:aws:iam::${this.account}:role/cdk-hnb659fds-*`],
       }),
     );
+    const cdkdRole = new iam.Role(this, 'CdkdRole', {
+      roleName: 'sakekasu-learning-cdkd-deploy',
+      description: 'cdkd deploy role for sakekasu-learning (assumed only by the GitHub Actions deploy role)',
+      assumedBy: new iam.ArnPrincipal(deployRole.roleArn),
+      maxSessionDuration: Duration.hours(1),
+      managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AdministratorAccess')],
+    });
+    deployRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'AssumeCdkdRole',
+        actions: ['sts:AssumeRole'],
+        resources: [cdkdRole.roleArn],
+      }),
+    );
     const buckets = [
       `sakekasu-learning-${envName}-web-${this.account}`,
       `sakekasu-learning-${envName}-questions-${this.account}`,
@@ -83,8 +101,9 @@ export class GithubOidcStack extends Stack {
     );
     deployRole.addToPolicy(
       new iam.PolicyStatement({
-        sid: 'ReadStackOutputs',
-        actions: ['cloudformation:DescribeStacks'],
+        // 移行スクリプトが CloudFormation のスタックが残っているかを確かめ、取り込むリソースの物理 ID を引く
+        sid: 'ReadStacks',
+        actions: ['cloudformation:DescribeStacks', 'cloudformation:DescribeStackResources'],
         resources: [this.region, webRegion].map(
           (r) => `arn:aws:cloudformation:${r}:${this.account}:stack/sakekasu-learning-${envName}-*/*`,
         ),
@@ -93,19 +112,49 @@ export class GithubOidcStack extends Stack {
 
     const diffRole = new iam.Role(this, 'DiffRole', {
       roleName: 'sakekasu-learning-github-actions-diff',
-      description: 'GitHub Actions cdk diff role for sakekasu-learning (pull requests only)',
+      description: 'GitHub Actions diff role for sakekasu-learning (pull requests only)',
       assumedBy: principal(`${subjectPrefix}:pull_request`),
       maxSessionDuration: Duration.hours(1),
     });
+    // cdkd diff が読むのは、このアプリのスタックの状態と、スタック間参照の索引・資産置き場の目印だけ。
+    // 状態バケットは同じアカウントの別プロジェクトと共有しているので、読めるキーをこのアプリの分に絞る。
+    // 次の 2 つは承知の上で残している（どちらもアカウントの持ち主は同じで、中身は ARN や ID、バケット名）
+    // - ListBucket: s3:prefix で絞ると、cdkd が状態バケットの確認に使う HeadBucket（接頭辞なし）も拒否される。
+    //   別プロジェクトのキー名（スタック名）は見える
+    // - _index / cdkd-bootstrap: cdkd がアカウントで共有する索引（Export の値）と資産置き場の目印。
+    //   このアプリは Fn::ImportValue を使うので、diff で索引を読む必要がある
+    const stateBucket = `cdkd-state-${this.account}`;
     diffRole.addToPolicy(
       new iam.PolicyStatement({
-        sid: 'AssumeLookupRole',
-        actions: ['sts:AssumeRole'],
-        resources: [`arn:aws:iam::${this.account}:role/cdk-hnb659fds-lookup-role-*`],
+        sid: 'ListCdkdState',
+        actions: ['s3:ListBucket', 's3:GetBucketLocation'],
+        resources: [`arn:aws:s3:::${stateBucket}`],
+      }),
+    );
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'ReadCdkdState',
+        actions: ['s3:GetObject'],
+        resources: [
+          `arn:aws:s3:::${stateBucket}/cdkd/sakekasu-learning-${envName}-*`,
+          `arn:aws:s3:::${stateBucket}/cdkd/_index/*`,
+          `arn:aws:s3:::${stateBucket}/cdkd-bootstrap/*`,
+        ],
+      }),
+    );
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        // 移行スクリプトが CloudFormation のスタックが残っているかを確かめる
+        sid: 'ReadStacks',
+        actions: ['cloudformation:DescribeStacks'],
+        resources: [this.region, webRegion].map(
+          (r) => `arn:aws:cloudformation:${r}:${this.account}:stack/sakekasu-learning-${envName}-*/*`,
+        ),
       }),
     );
 
     new CfnOutput(this, 'DeployRoleArn', { value: deployRole.roleArn });
     new CfnOutput(this, 'DiffRoleArn', { value: diffRole.roleArn });
+    new CfnOutput(this, 'CdkdRoleArn', { value: cdkdRole.roleArn });
   }
 }

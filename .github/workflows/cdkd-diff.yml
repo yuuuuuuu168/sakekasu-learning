@@ -1,12 +1,13 @@
-# PR で cdk diff を実行し、結果を PR にコメントする（既存のコメントがあれば更新する）。
-name: cdk-diff
+# PR で cdkd diff を実行し、結果を PR にコメントする（既存のコメントがあれば更新する）。
+# CloudFormation から未移行のスタックは、その旨だけを出す（取り込みは main へのマージ時）。
+name: cdkd-diff
 
 on:
   pull_request:
     paths:
       - 'infra/**'
       - 'agent/**'
-      - '.github/workflows/cdk-diff.yml'
+      - '.github/workflows/cdkd-diff.yml'
 
 permissions:
   id-token: write
@@ -15,6 +16,9 @@ permissions:
 
 jobs:
   diff:
+    # PR のコードを AWS の認証情報を持った状態で実行するので、このリポジトリのブランチからの PR に限る
+    # （フォークからの PR では動かさない）
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -41,8 +45,10 @@ jobs:
       - id: diff
         run: |
           set +e
-          npx cdk diff --all --no-color > diff.txt 2>&1
+          bash scripts/cdkd-stacks.sh preview > raw.txt 2>&1
           echo "exit=$?" >> "$GITHUB_OUTPUT"
+          # cdkd は NO_COLOR でも色のエスケープシーケンスを出すので、コメントに載せる前に落とす
+          sed -E 's/\x1b\[[0-9;]*m//g' raw.txt > diff.txt
       - uses: actions/github-script@v9
         with:
           script: |
@@ -50,7 +56,10 @@ jobs:
             const marker = '<!-- cdk-diff -->';
             let diff = fs.readFileSync('infra/diff.txt', 'utf8');
             if (diff.length > 60000) diff = diff.slice(0, 60000) + '\n... (truncated)';
-            const body = `${marker}\n### cdk diff\n\n\`\`\`\n${diff}\n\`\`\``;
+            // 出力中のバッククォートでコードブロックが閉じないよう、最長の連続より長いフェンスで囲む
+            const longest = Math.max(0, ...(diff.match(/`+/g) ?? []).map((run) => run.length));
+            const fence = '`'.repeat(Math.max(3, longest + 1));
+            const body = `${marker}\n### cdkd diff\n\n${fence}\n${diff}\n${fence}`;
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
             const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
@@ -62,5 +71,5 @@ jobs:
             }
       - if: steps.diff.outputs.exit != '0'
         run: |
-          echo "cdk diff が失敗しました"
+          echo "cdkd diff が失敗しました"
           exit 1
