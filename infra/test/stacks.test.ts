@@ -49,7 +49,8 @@ describe('stacks', () => {
       throw new Error('先に npm run package:agent を実行してください');
     }
     t = synth();
-  });
+    // synth は Lambda のバンドルとエージェントのパッケージ（数十 MB）のコピーを含み、CI では 10 秒を超えることがある
+  }, 60_000);
 
   it('招待制（セルフサインアップ無効）の User Pool を作る', () => {
     t.auth.hasResourceProperties('AWS::Cognito::UserPool', {
