@@ -25,8 +25,6 @@ export interface GithubOidcStackProps extends StackProps {
  * - cdkd:   deploy ロールからだけ引き受けられる。cdkd は CloudFormation を通さず各サービスの API を
  *           直接呼ぶため、デプロイするリソースすべての権限が要る。CDK の cfn-exec ロールと同じく管理者権限
  * - diff:   PR でだけ使える。cdkd diff 用に、このアプリの cdkd の状態だけを読める（AWS のリソースやデータは読めない）
- *
- * 移行前の cdk deploy が使う CDK ブートストラップロールの引き受けは、移行が済むまで残す。
  */
 export class GithubOidcStack extends Stack {
   constructor(scope: Construct, id: string, props: GithubOidcStackProps) {
@@ -53,13 +51,6 @@ export class GithubOidcStack extends Stack {
       assumedBy: principal(`${subjectPrefix}:ref:refs/heads/main`),
       maxSessionDuration: Duration.hours(1),
     });
-    deployRole.addToPolicy(
-      new iam.PolicyStatement({
-        sid: 'AssumeCdkRoles',
-        actions: ['sts:AssumeRole'],
-        resources: [`arn:aws:iam::${this.account}:role/cdk-hnb659fds-*`],
-      }),
-    );
     const cdkdRole = new iam.Role(this, 'CdkdRole', {
       roleName: 'sakekasu-learning-cdkd-deploy',
       description: 'cdkd deploy role for sakekasu-learning (assumed only by the GitHub Actions deploy role)',
@@ -129,6 +120,39 @@ export class GithubOidcStack extends Stack {
         sid: 'ListCdkdState',
         actions: ['s3:ListBucket', 's3:GetBucketLocation'],
         resources: [`arn:aws:s3:::${stateBucket}`],
+      }),
+    );
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        // cdkd は資産置き場のバケットが自分のアカウントのものかを HeadBucket で確かめる（ListBucket の権限で判定される）
+        sid: 'CheckCdkdAssets',
+        actions: ['s3:ListBucket', 's3:GetBucketLocation'],
+        resources: [`arn:aws:s3:::cdkd-assets-${this.account}-*`],
+      }),
+    );
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        // 同じ確認で、コンテナ資産の置き場（ECR）があるかも見る
+        sid: 'CheckCdkdContainerAssets',
+        actions: ['ecr:DescribeRepositories'],
+        resources: [`arn:aws:ecr:*:${this.account}:repository/cdkd-container-assets-${this.account}-*`],
+      }),
+    );
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        // 変更が置き換え（作り直し）になるかを、公開されているリソース型のスキーマから判定する
+        sid: 'ReadResourceSchemas',
+        actions: ['cloudformation:DescribeType'],
+        resources: ['arn:aws:cloudformation:*::type/resource/*'],
+      }),
+    );
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        // Fn::GetAtt [Distribution, DomainName] は CloudFront から読んで解決する。読めないと Route 53 の
+        // レコードに実際には無い変更が出る
+        sid: 'ResolveDistributionDomain',
+        actions: ['cloudfront:GetDistribution'],
+        resources: [`arn:aws:cloudfront::${this.account}:distribution/*`],
       }),
     );
     diffRole.addToPolicy(
