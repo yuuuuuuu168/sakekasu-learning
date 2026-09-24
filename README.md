@@ -43,6 +43,10 @@
 | `sakekasu-learning-dev-web` | us-east-1 | ACM、S3、CloudFront、Route 53 レコード |
 | `sakekasu-learning-github-oidc` | ap-northeast-1 | GitHub Actions 用ロール（手動デプロイ） |
 
+github-oidc 以外のスタックは [cdkd](https://github.com/go-to-k/cdkd) でデプロイする。CloudFormation を通さず各サービスの API を直接呼ぶので速い。
+スタックの状態（リソースの対応表と出力）は CloudFormation ではなく S3 の `cdkd-state-232791540685` に置かれる。
+github-oidc だけは CI 自身の権限を定義するため、手元から `cdk deploy`（CloudFormation）でデプロイする。
+
 ## ディレクトリ
 
 ```
@@ -84,7 +88,7 @@ agent/     AI 家庭教師（Strands Agents / AgentCore Runtime）
 
 ## 初回セットアップ
 
-前提: sakekasu-builder と同じアカウント（232791540685）で、CDK のブートストラップが ap-northeast-1 と us-east-1 の両方で済んでいること。
+前提: sakekasu-builder と同じアカウント（232791540685）で、CDK のブートストラップが ap-northeast-1 で済んでいること（github-oidc スタック用）。
 
 ### 1. DNS（サブドメインの委任）
 
@@ -121,14 +125,19 @@ AWS_PROFILE=yuuuuuuuki7749 aws route53 change-resource-record-sets \
 
 最後に、控えたゾーン ID（`Z` から始まる部分）を `infra/cdk.json` の `hostedZoneId` に入れてコミットする。
 
-### 2. GitHub Actions 用ロール（CI 自身の権限なので手動）
+### 2. GitHub Actions 用ロールと cdkd の準備（CI 自身の権限なので手動）
 
 ```bash
 cd infra && npm ci
-AWS_PROFILE=sakekasu-builder npx cdk deploy sakekasu-learning-github-oidc -c github-oidc=true
+bash scripts/setup-cdkd.sh   # AWS_PROFILE は既定で sakekasu-builder
 ```
 
+GitHub Actions 用ロール（github-oidc スタック）をデプロイし、`cdkd bootstrap` で状態を置くバケットを作る。
 その後 main に push すると deploy ワークフローが全スタックと問題データ・フロントエンドをデプロイする。
+
+CloudFormation（`cdk deploy`）でデプロイ済みのスタックがあれば、deploy ワークフローが最初に cdkd へ移す
+（`infra/scripts/cdkd-stacks.sh migrate`）。全リソースを Retain にしてから CloudFormation のスタックを消すので、
+Cognito のユーザーや回答履歴はそのまま残る。
 
 ### Bedrock のモデル
 
@@ -151,9 +160,8 @@ AWS_PROFILE=sakekasu-builder aws bedrock get-foundation-model-availability --mod
 初回ログインではパスワードの変更と、認証アプリ（Google Authenticator など）の登録を求められる。
 
 ```bash
-USER_POOL_ID=$(AWS_PROFILE=sakekasu-builder aws cloudformation describe-stacks \
-  --stack-name sakekasu-learning-dev-auth \
-  --query "Stacks[0].Outputs[?OutputKey=='UserPoolId'].OutputValue" --output text)
+USER_POOL_ID=$(cd infra && AWS_PROFILE=sakekasu-builder npx cdkd state show sakekasu-learning-dev-auth --json \
+  | jq -r '.state.outputs.UserPoolId')
 
 AWS_PROFILE=sakekasu-builder aws cognito-idp admin-create-user \
   --user-pool-id "$USER_POOL_ID" \
@@ -185,7 +193,9 @@ cd web && npm run dev
 | ワークフロー | トリガー | 内容 |
 |---|---|---|
 | `test.yml` | PR / main | 問題の形式チェック、infra / web / agent のテスト |
-| `cdk-diff.yml` | PR（infra・agent） | `cdk diff` を PR にコメント |
-| `deploy.yml` | main | cdk deploy → 問題データ同期 → フロント同期 → キャッシュ削除 |
+| `cdkd-diff.yml` | PR（infra・agent） | `cdkd diff` を PR にコメント（未移行のスタックは `cdkd import --dry-run`） |
+| `deploy.yml` | main | cdkd deploy → 問題データ同期 → フロント同期 → キャッシュ削除 |
 
 AWS へは GitHub OIDC で入る。deploy ロールは main ブランチからだけ、diff ロールは PR からだけ引き受けられる。
+cdkd は deploy ロールから `sakekasu-learning-cdkd-deploy`（管理者権限。CDK の cfn-exec ロールに当たる）に切り替えてデプロイする。
+diff ロールは読み取り専用で、回答履歴・ユーザー・非公開の問題データ・ログは読めない。

@@ -20,9 +20,13 @@ export interface GithubOidcStackProps extends StackProps {
  * OIDC プロバイダはアカウントに1つしか作れず、sakekasu-builder が作成済みなので import する。
  * このスタックは CI 自身の権限を定義するため、手動でデプロイする（-c github-oidc=true）。
  *
- * - deploy: main への push でだけ使える。CDK のブートストラップロールの引き受けと、
+ * - deploy: main への push でだけ使える。cdkd 用ロールの引き受けと、
  *           サイト・問題データの同期、CloudFront のキャッシュ削除だけを許可する
- * - diff:   PR でだけ使える。cdk diff 用の読み取りロールの引き受けだけを許可する
+ * - cdkd:   deploy ロールからだけ引き受けられる。cdkd は CloudFormation を通さず各サービスの API を
+ *           直接呼ぶため、デプロイするリソースすべての権限が要る。CDK の cfn-exec ロールと同じく管理者権限
+ * - diff:   PR でだけ使える。cdkd diff / import --dry-run 用の読み取り権限（データの中身は読ませない）
+ *
+ * 移行前の cdk deploy / cdk diff が使う CDK ブートストラップロールの引き受けは、移行が済むまで残す。
  */
 export class GithubOidcStack extends Stack {
   constructor(scope: Construct, id: string, props: GithubOidcStackProps) {
@@ -56,6 +60,20 @@ export class GithubOidcStack extends Stack {
         resources: [`arn:aws:iam::${this.account}:role/cdk-hnb659fds-*`],
       }),
     );
+    const cdkdRole = new iam.Role(this, 'CdkdRole', {
+      roleName: 'sakekasu-learning-cdkd-deploy',
+      description: 'cdkd deploy role for sakekasu-learning (assumed only by the GitHub Actions deploy role)',
+      assumedBy: new iam.ArnPrincipal(deployRole.roleArn),
+      maxSessionDuration: Duration.hours(1),
+      managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AdministratorAccess')],
+    });
+    deployRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'AssumeCdkdRole',
+        actions: ['sts:AssumeRole'],
+        resources: [cdkdRole.roleArn],
+      }),
+    );
     const buckets = [
       `sakekasu-learning-${envName}-web-${this.account}`,
       `sakekasu-learning-${envName}-questions-${this.account}`,
@@ -83,7 +101,8 @@ export class GithubOidcStack extends Stack {
     );
     deployRole.addToPolicy(
       new iam.PolicyStatement({
-        sid: 'ReadStackOutputs',
+        // 移行スクリプトが CloudFormation のスタックが残っているかを確かめる
+        sid: 'ReadStacks',
         actions: ['cloudformation:DescribeStacks'],
         resources: [this.region, webRegion].map(
           (r) => `arn:aws:cloudformation:${r}:${this.account}:stack/sakekasu-learning-${envName}-*/*`,
@@ -93,7 +112,7 @@ export class GithubOidcStack extends Stack {
 
     const diffRole = new iam.Role(this, 'DiffRole', {
       roleName: 'sakekasu-learning-github-actions-diff',
-      description: 'GitHub Actions cdk diff role for sakekasu-learning (pull requests only)',
+      description: 'GitHub Actions diff role for sakekasu-learning (pull requests only)',
       assumedBy: principal(`${subjectPrefix}:pull_request`),
       maxSessionDuration: Duration.hours(1),
     });
@@ -105,7 +124,58 @@ export class GithubOidcStack extends Stack {
       }),
     );
 
+    diffRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('ReadOnlyAccess'));
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'ReadAgentCore',
+        actions: ['bedrock-agentcore:Get*', 'bedrock-agentcore:List*'],
+        resources: ['*'],
+      }),
+    );
+    // cdkd import --dry-run も、ほかのデプロイと競合しないようにスタックのロックを取る
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'CdkdStateLock',
+        actions: ['s3:PutObject', 's3:DeleteObject'],
+        resources: [`arn:aws:s3:::cdkd-state-${this.account}/cdkd/*/lock.json`],
+      }),
+    );
+    // PR から回答履歴・ユーザー・非公開の問題データ・ログを読めないようにする
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'DenyDataRead',
+        effect: iam.Effect.DENY,
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:BatchGetItem',
+          'dynamodb:Query',
+          'dynamodb:Scan',
+          'dynamodb:GetRecords',
+          'dynamodb:PartiQLSelect',
+          'dynamodb:ExportTableToPointInTime',
+          'cognito-idp:ListUsers',
+          'cognito-idp:ListUsersInGroup',
+          'cognito-idp:AdminGetUser',
+          'cognito-idp:AdminListDevices',
+          'logs:GetLogEvents',
+          'logs:FilterLogEvents',
+          'logs:StartQuery',
+          'logs:StartLiveTail',
+        ],
+        resources: ['*'],
+      }),
+    );
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'DenyQuestionData',
+        effect: iam.Effect.DENY,
+        actions: ['s3:GetObject', 's3:GetObjectVersion'],
+        resources: [`arn:aws:s3:::sakekasu-learning-${envName}-questions-${this.account}/*`],
+      }),
+    );
+
     new CfnOutput(this, 'DeployRoleArn', { value: deployRole.roleArn });
     new CfnOutput(this, 'DiffRoleArn', { value: diffRole.roleArn });
+    new CfnOutput(this, 'CdkdRoleArn', { value: cdkdRole.roleArn });
   }
 }

@@ -1,13 +1,14 @@
 /**
- * デプロイ済みスタックの出力から、フロントエンドが起動時に読む config.json を作る。
+ * デプロイ済みスタックの出力（cdkd の状態に記録されている）から、フロントエンドが起動時に読む config.json を作る。
  *
  * 使い方（infra/ で実行）:
  *   AWS_PROFILE=sakekasu-builder npx tsx scripts/write-web-config.ts ../web/public/config.json
  *
  * 値はどれも秘密情報ではない（呼び出しには Cognito のトークンが必須）。
  */
+import { execFile } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
-import { CloudFormationClient, DescribeStacksCommand } from '@aws-sdk/client-cloudformation';
+import { promisify } from 'node:util';
 
 const envName = process.env.ENV_NAME ?? 'dev';
 const region = 'ap-northeast-1';
@@ -17,13 +18,10 @@ if (!out) {
   process.exit(1);
 }
 
-const cfn = new CloudFormationClient({ region });
-
 async function outputs(stackName: string): Promise<Record<string, string>> {
-  const res = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
-  return Object.fromEntries(
-    (res.Stacks?.[0]?.Outputs ?? []).map((o) => [o.OutputKey ?? '', o.OutputValue ?? '']),
-  );
+  const { stdout } = await promisify(execFile)('npx', ['cdkd', 'state', 'show', stackName, '--json']);
+  const record = JSON.parse(stdout) as { state?: { outputs?: Record<string, string> } };
+  return record.state?.outputs ?? {};
 }
 
 function required(values: Record<string, string>, key: string, stack: string): string {

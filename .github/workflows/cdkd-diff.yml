@@ -1,12 +1,13 @@
-# PR で cdk diff を実行し、結果を PR にコメントする（既存のコメントがあれば更新する）。
-name: cdk-diff
+# PR で cdkd diff を実行し、結果を PR にコメントする（既存のコメントがあれば更新する）。
+# CloudFormation から未移行のスタックは、代わりに cdkd import --dry-run の結果を出す。
+name: cdkd-diff
 
 on:
   pull_request:
     paths:
       - 'infra/**'
       - 'agent/**'
-      - '.github/workflows/cdk-diff.yml'
+      - '.github/workflows/cdkd-diff.yml'
 
 permissions:
   id-token: write
@@ -41,7 +42,7 @@ jobs:
       - id: diff
         run: |
           set +e
-          npx cdk diff --all --no-color > diff.txt 2>&1
+          NO_COLOR=1 bash scripts/cdkd-stacks.sh preview > diff.txt 2>&1
           echo "exit=$?" >> "$GITHUB_OUTPUT"
       - uses: actions/github-script@v9
         with:
@@ -50,7 +51,7 @@ jobs:
             const marker = '<!-- cdk-diff -->';
             let diff = fs.readFileSync('infra/diff.txt', 'utf8');
             if (diff.length > 60000) diff = diff.slice(0, 60000) + '\n... (truncated)';
-            const body = `${marker}\n### cdk diff\n\n\`\`\`\n${diff}\n\`\`\``;
+            const body = `${marker}\n### cdkd diff\n\n\`\`\`\n${diff}\n\`\`\``;
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
             const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
@@ -62,5 +63,5 @@ jobs:
             }
       - if: steps.diff.outputs.exit != '0'
         run: |
-          echo "cdk diff が失敗しました"
+          echo "cdkd diff が失敗しました"
           exit 1
