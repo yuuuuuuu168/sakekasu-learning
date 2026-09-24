@@ -124,6 +124,22 @@ export class GithubOidcStack extends Stack {
     );
     diffRole.addToPolicy(
       new iam.PolicyStatement({
+        // cdkd は資産置き場のバケットが自分のアカウントのものかを HeadBucket で確かめる（ListBucket の権限で判定される）
+        sid: 'CheckCdkdAssets',
+        actions: ['s3:ListBucket', 's3:GetBucketLocation'],
+        resources: [`arn:aws:s3:::cdkd-assets-${this.account}-*`],
+      }),
+    );
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        // 同じ確認で、コンテナ資産の置き場（ECR）があるかも見る
+        sid: 'CheckCdkdContainerAssets',
+        actions: ['ecr:DescribeRepositories'],
+        resources: [`arn:aws:ecr:*:${this.account}:repository/cdkd-container-assets-${this.account}-*`],
+      }),
+    );
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
         sid: 'ReadCdkdState',
         actions: ['s3:GetObject'],
         resources: [
