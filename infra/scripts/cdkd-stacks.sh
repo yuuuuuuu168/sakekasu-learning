@@ -5,7 +5,8 @@
 #   bash scripts/cdkd-stacks.sh migrate   # 未移行のスタックを cdkd に取り込み、CloudFormation のスタックを消す
 #   bash scripts/cdkd-stacks.sh preview   # 移行済みのスタックの cdkd diff（PR 用。読み取りだけ）
 #
-# migrate は移行済みなら何もしないので、deploy ワークフローで毎回実行してよい。
+# migrate は手元で実行する（AWS_PROFILE=sakekasu-builder）。移行済みのスタックには何もしない。
+# dev 環境は移行済みのため、deploy ワークフローからは呼ばない（毎回の確認に 10 秒ほどかかっていた）。
 # CloudFormation のスタックを消すときは全リソースを Retain にしてから消すため、AWS のリソースは残る。
 # 前提: cdkd bootstrap が済んでいること（scripts/setup-cdkd.sh）
 set -euo pipefail

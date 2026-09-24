@@ -92,7 +92,8 @@ export class GithubOidcStack extends Stack {
     );
     deployRole.addToPolicy(
       new iam.PolicyStatement({
-        // 移行スクリプトが CloudFormation のスタックが残っているかを確かめ、取り込むリソースの物理 ID を引く
+        // 移行スクリプト（cdkd-stacks.sh migrate）用。移行が済み deploy からは呼ばなくなったので、
+        // 次に IAM を変えるときに外してよい（読み取りだけなので残しても害は無い）
         sid: 'ReadStacks',
         actions: ['cloudformation:DescribeStacks', 'cloudformation:DescribeStackResources'],
         resources: [this.region, webRegion].map(

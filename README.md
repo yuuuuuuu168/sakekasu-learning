@@ -135,9 +135,13 @@ bash scripts/setup-cdkd.sh   # AWS_PROFILE は既定で sakekasu-builder
 GitHub Actions 用ロール（github-oidc スタック）をデプロイし、`cdkd bootstrap` で状態を置くバケットを作る。
 その後 main に push すると deploy ワークフローが全スタックと問題データ・フロントエンドをデプロイする。
 
-CloudFormation（`cdk deploy`）でデプロイ済みのスタックがあれば、deploy ワークフローが最初に cdkd へ移す
-（`infra/scripts/cdkd-stacks.sh migrate`）。全リソースを Retain にしてから CloudFormation のスタックを消すので、
+CloudFormation（`cdk deploy`）でデプロイ済みのスタックがあるときは、先に手元で cdkd へ移す
+（dev 環境は移行済み）。全リソースを Retain にしてから CloudFormation のスタックを消すので、
 Cognito のユーザーや回答履歴はそのまま残る。
+
+```bash
+cd infra && AWS_PROFILE=sakekasu-builder bash scripts/cdkd-stacks.sh migrate
+```
 
 ### Bedrock のモデル
 
