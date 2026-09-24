@@ -140,6 +140,23 @@ export class GithubOidcStack extends Stack {
     );
     diffRole.addToPolicy(
       new iam.PolicyStatement({
+        // 変更が置き換え（作り直し）になるかを、公開されているリソース型のスキーマから判定する
+        sid: 'ReadResourceSchemas',
+        actions: ['cloudformation:DescribeType'],
+        resources: ['arn:aws:cloudformation:*::type/resource/*'],
+      }),
+    );
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
+        // Fn::GetAtt [Distribution, DomainName] は CloudFront から読んで解決する。読めないと Route 53 の
+        // レコードに実際には無い変更が出る
+        sid: 'ResolveDistributionDomain',
+        actions: ['cloudfront:GetDistribution'],
+        resources: [`arn:aws:cloudfront::${this.account}:distribution/*`],
+      }),
+    );
+    diffRole.addToPolicy(
+      new iam.PolicyStatement({
         sid: 'ReadCdkdState',
         actions: ['s3:GetObject'],
         resources: [
