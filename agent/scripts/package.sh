@@ -22,5 +22,9 @@ uv pip install \
 cp src/*.py dist/package/
 # 別アーキテクチャでコンパイルされたバイトコードは持ち込まない
 find dist/package -name '__pycache__' -type d -prune -exec rm -rf {} +
+# コマンド（bin/）は Runtime では使わない（main.py から起動する）。shebang にビルドした環境の Python のパスが
+# 入るため、環境によって中身が変わり、資産のハッシュが変わって Runtime の更新が起きる。RECORD の該当行も消す
+rm -rf dist/package/bin
+find dist/package -path '*.dist-info/RECORD' -exec perl -i -ne 'print unless m{^bin/}' {} +
 
 echo "packaged: $(du -sh dist/package | cut -f1) -> $(pwd)/dist/package"
