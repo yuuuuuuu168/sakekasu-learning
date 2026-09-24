@@ -6,8 +6,6 @@ node_modules/
 dist/
 build/
 infra/cdk.out/
-infra/cdk.out.repro/
-infra/scripts/cdkd-repro/result.txt
 agent/dist/
 *.tsbuildinfo
 __pycache__/
