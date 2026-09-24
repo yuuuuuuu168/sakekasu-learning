@@ -3,7 +3,7 @@
 #
 # 使い方（infra/ で実行）:
 #   bash scripts/cdkd-stacks.sh migrate   # 未移行のスタックを cdkd に取り込み、CloudFormation のスタックを消す
-#   bash scripts/cdkd-stacks.sh preview   # 移行済みは cdkd diff、未移行は cdkd import --dry-run
+#   bash scripts/cdkd-stacks.sh preview   # 移行済みのスタックの cdkd diff（PR 用。読み取りだけ）
 #
 # migrate は移行済みなら何もしないので、deploy ワークフローで毎回実行してよい。
 # CloudFormation のスタックを消すときは全リソースを Retain にしてから消すため、AWS のリソースは残る。
@@ -89,6 +89,11 @@ for entry in "${stacks[@]}"; do
     migrated+=("$stack")
     continue
   fi
+  if [[ "$mode" == preview ]]; then
+    # import --dry-run はロックを書くため、読み取り専用の PR 用ロールでは実行しない
+    echo "== ${stack}: 未移行（main へのマージで CloudFormation から cdkd に取り込む）"
+    continue
+  fi
   args="$(import_args "$stack" "$region")"
   extra=()
   if [[ -n "$args" ]]; then
@@ -96,15 +101,9 @@ for entry in "${stacks[@]}"; do
   fi
   # cdkd import は、スタックのリージョンではなく既定のリージョンで CloudFormation と各リソースを引くため、
   # スタックごとに AWS_REGION を合わせる（us-east-1 の web スタックが取り込めない）
-  if [[ "$mode" == migrate ]]; then
-    echo "== ${stack}: CloudFormation から cdkd へ移行する"
-    AWS_REGION="$region" AWS_DEFAULT_REGION="$region" \
-      npx cdkd import "$stack" --migrate-from-cloudformation --yes "${extra[@]}"
-  else
-    echo "== ${stack}: 未移行（main へのマージで cdkd に取り込む）。取り込みの予定:"
-    AWS_REGION="$region" AWS_DEFAULT_REGION="$region" \
-      npx cdkd import "$stack" --dry-run "${extra[@]}"
-  fi
+  echo "== ${stack}: CloudFormation から cdkd へ移行する"
+  AWS_REGION="$region" AWS_DEFAULT_REGION="$region" \
+    npx cdkd import "$stack" --migrate-from-cloudformation --yes "${extra[@]}"
 done
 
 if [[ "$mode" == preview && ${#migrated[@]} -gt 0 ]]; then
