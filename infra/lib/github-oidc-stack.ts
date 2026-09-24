@@ -117,7 +117,12 @@ export class GithubOidcStack extends Stack {
       maxSessionDuration: Duration.hours(1),
     });
     // cdkd diff が読むのは、このアプリのスタックの状態と、スタック間参照の索引・資産置き場の目印だけ。
-    // 状態バケットは同じアカウントの別プロジェクトと共有しているので、読めるキーをこのアプリの分に絞る
+    // 状態バケットは同じアカウントの別プロジェクトと共有しているので、読めるキーをこのアプリの分に絞る。
+    // 次の 2 つは承知の上で残している（どちらもアカウントの持ち主は同じで、中身は ARN や ID、バケット名）
+    // - ListBucket: s3:prefix で絞ると、cdkd が状態バケットの確認に使う HeadBucket（接頭辞なし）も拒否される。
+    //   別プロジェクトのキー名（スタック名）は見える
+    // - _index / cdkd-bootstrap: cdkd がアカウントで共有する索引（Export の値）と資産置き場の目印。
+    //   このアプリは Fn::ImportValue を使うので、diff で索引を読む必要がある
     const stateBucket = `cdkd-state-${this.account}`;
     diffRole.addToPolicy(
       new iam.PolicyStatement({
