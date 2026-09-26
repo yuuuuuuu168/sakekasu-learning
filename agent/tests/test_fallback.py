@@ -57,3 +57,29 @@ def test_no_fallback_after_partial_output(monkeypatch):
     out, used = _run(monkeypatch, {"primary": FakeAgent(["a", "b"], fail_after=1), "fallback": FakeAgent(["x"])})
     assert out.startswith("a") and "エラー" in out and "x" not in out
     assert used == ["primary"]
+
+
+class ToolAgent:
+    """前置き → ツール呼び出し → 本文の順にイベントを返す。"""
+
+    def __init__(self, events):
+        self.events = events
+
+    async def stream_async(self, prompt):
+        for e in self.events:
+            yield e
+
+
+TOOL_EVENT = {"type": "tool_use_stream", "current_tool_use": {"name": "search"}}
+
+
+def test_blank_line_after_tool_use(monkeypatch):
+    agent = ToolAgent([{"data": "確認します。"}, TOOL_EVENT, TOOL_EVENT, {"data": "## 結論"}, {"data": "\nA です"}])
+    out, _ = _run(monkeypatch, {"primary": agent})
+    assert out == "確認します。\n\n## 結論\nA です"
+
+
+def test_no_blank_line_when_tool_used_before_any_text(monkeypatch):
+    agent = ToolAgent([TOOL_EVENT, {"data": "## 結論"}])
+    out, _ = _run(monkeypatch, {"primary": agent})
+    assert out == "## 結論"
