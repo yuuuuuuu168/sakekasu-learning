@@ -15,14 +15,13 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const AGENT_PACKAGE_DIR = path.resolve(here, '../../agent/dist/package');
 
 /**
- * 既定のモデル。Sonnet 5 を優先し、応答前に失敗したら Opus 5.5 で答え直す。
- * - Sonnet 5 は東京からは Global プロファイルしか無い
- * - Opus 5.5 は国内（jp）プロファイルがある
- * どちらも Bedrock のモデル利用契約（create-foundation-model-agreement）が必要。
- * `-c agentModelId=...` / `-c agentFallbackModelId=...` で切り替えられる。
+ * 既定のモデル。Kimi K3 だけを使い、予備のモデルは置かない。
+ * - Kimi K3 は東京からは Global プロファイルしか無い
+ * - Sonnet 5 / Opus 5.5 はアカウント単位のアクセス制限で使えない（利用実績を積むと緩和される）
+ * `-c agentModelId=...` / `-c agentFallbackModelId=...` で切り替えられる（予備は空なら使わない）。
  */
-export const DEFAULT_MODEL_ID = 'global.anthropic.claude-sonnet-5';
-export const DEFAULT_FALLBACK_MODEL_ID = 'jp.anthropic.claude-opus-5-5';
+export const DEFAULT_MODEL_ID = 'global.moonshotai.kimi-k3';
+export const DEFAULT_FALLBACK_MODEL_ID = '';
 
 /** AWS 公式ドキュメントを検索・参照できるリモート MCP サーバー（認証不要） */
 export const AWS_KNOWLEDGE_MCP_URL = 'https://knowledge-mcp.global.api.aws';
@@ -74,15 +73,16 @@ export class AgentStack extends Stack {
 
     role.addToPolicy(
       new iam.PolicyStatement({
-        sid: 'InvokeClaude',
+        sid: 'InvokeModels',
         actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
         // Global / Geo 推論プロファイルは、呼び出し元リージョンのプロファイルと
-        // ルーティング先の全リージョンの基盤モデルの両方に権限が要る
-        resources: [
-          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/*.anthropic.claude-*`,
-          'arn:aws:bedrock:*::foundation-model/anthropic.claude-*',
-          'arn:aws:bedrock:::foundation-model/anthropic.claude-*',
-        ],
+        // ルーティング先の全リージョンの基盤モデルの両方に権限が要る。
+        // Claude はアクセス制限が解けたら context で戻せるように残しておく
+        resources: ['anthropic.claude-*', 'moonshotai.kimi-*'].flatMap((model) => [
+          `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/*.${model}`,
+          `arn:aws:bedrock:*::foundation-model/${model}`,
+          `arn:aws:bedrock:::foundation-model/${model}`,
+        ]),
       }),
     );
     role.addToPolicy(
@@ -172,7 +172,7 @@ export class AgentStack extends Stack {
       lifecycleConfiguration: { idleRuntimeSessionTimeout: 300, maxLifetime: 3600 },
       environmentVariables: {
         MODEL_ID: modelId,
-        FALLBACK_MODEL_ID: fallbackModelId,
+        ...(fallbackModelId ? { FALLBACK_MODEL_ID: fallbackModelId } : {}),
         QUESTIONS_BUCKET_NAME: questionsBucket.bucketName,
         COGNITO_USER_POOL_ID: userPool.userPoolId,
         COGNITO_CLIENT_ID: userPoolClient.userPoolClientId,

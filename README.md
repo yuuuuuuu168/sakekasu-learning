@@ -145,11 +145,15 @@ cd infra && AWS_PROFILE=sakekasu-builder bash scripts/cdkd-stacks.sh migrate
 
 ### Bedrock のモデル
 
-既定は Sonnet 5（`global.anthropic.claude-sonnet-5`、東京からは Global プロファイルのみ）。
-応答を返し始める前に失敗したときは Opus 5.5（`jp.anthropic.claude-opus-5-5`、国内プロファイル）で答え直す。
+既定は Kimi K3（`global.moonshotai.kimi-k3`、東京からは Global プロファイルのみ）で、予備のモデルは置かない。
 `infra/cdk.json` の context の `agentModelId` / `agentFallbackModelId` で変更できる。
+予備を設定すると、応答を返し始める前に失敗したときだけ予備のモデルで答え直す。
 
-Bedrock の Anthropic の新しいモデルは、モデルごとに利用契約が必要（未契約だと `AccessDeniedException: ... is not available for this account`）。
+Sonnet 5 / Opus 5.5 などの新しいモデルは、契約済みでもアカウント単位のアクセス制限で
+`AccessDeniedException: ... is not available for this account` になることがある（2026-09 時点のサポート回答。
+基準は非公開で、利用実績を積むと自動で緩和される）。クォータが 0 でなくても制限されることがある。
+
+Bedrock の Anthropic の新しいモデルは、モデルごとに利用契約も必要。
 
 ```bash
 M=anthropic.claude-sonnet-5
