@@ -146,10 +146,20 @@ async def invoke(payload: Any, context: Any):
         # 会話履歴は Agent が書き換えるため、モデルごとに作り直す
         agent = _build_agent(ctx, _sanitize_history(payload.get("history")), model_id)
         started = False
+        # ツールを呼ぶ前の前置きと呼んだ後の本文が改行なしでつながると、本文冒頭の見出し（##）が
+        # Markdown として崩れるため、ツールを挟んで本文を再開するときは空行を入れる
+        break_before_text = False
         try:
             async for event in agent.stream_async(prompt):
-                data = event.get("data") if isinstance(event, dict) else None
-                if isinstance(data, str):
+                if not isinstance(event, dict):
+                    continue
+                if started and event.get("current_tool_use"):
+                    break_before_text = True
+                data = event.get("data")
+                if isinstance(data, str) and data:
+                    if break_before_text:
+                        yield "\n\n"
+                        break_before_text = False
                     started = True
                     yield data
             return
