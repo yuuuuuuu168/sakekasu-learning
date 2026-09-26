@@ -331,7 +331,8 @@ export function QuestionPage() {
       )}
 
       <ChatPanel
-        key={`${id}:${displayOrder.join(',')}`}
+        // 回答の前後で会話をリセットする（回答前のヒントの会話を回答後に持ち越さない）
+        key={`${id}:${displayOrder.join(',')}:${result ? 'answered' : 'unanswered'}`}
         open={chatOpen}
         onClose={() => setChatOpen(false)}
         category={category}
