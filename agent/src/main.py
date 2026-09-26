@@ -30,9 +30,9 @@ log = logging.getLogger("tutor")
 
 app = BedrockAgentCoreApp()
 
-MODEL_ID = os.environ.get("MODEL_ID", "global.anthropic.claude-sonnet-5")
+MODEL_ID = os.environ.get("MODEL_ID", "global.moonshotai.kimi-k3")
 # MODEL_ID が応答を1文字も返さないうちに失敗したときに使うモデル（空なら切り替えない）
-FALLBACK_MODEL_ID = os.environ.get("FALLBACK_MODEL_ID", "jp.anthropic.claude-opus-5-5")
+FALLBACK_MODEL_ID = os.environ.get("FALLBACK_MODEL_ID", "")
 AWS_KNOWLEDGE_MCP_URL = os.environ.get("AWS_KNOWLEDGE_MCP_URL", "https://knowledge-mcp.global.api.aws")
 DOC_TOOLS = [
     "aws___search_documentation",

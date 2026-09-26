@@ -81,14 +81,14 @@ describe('stacks', () => {
     });
   });
 
-  it('AgentCore Runtime は Cognito の JWT で保護し、Sonnet を使う', () => {
+  it('AgentCore Runtime は Cognito の JWT で保護し、Kimi K3 だけを使う', () => {
     t.agent.hasResourceProperties('AWS::BedrockAgentCore::Runtime', {
       AuthorizerConfiguration: {
         CustomJWTAuthorizer: Match.objectLike({ AllowedClients: Match.anyValue() }),
       },
       EnvironmentVariables: Match.objectLike({
-        MODEL_ID: 'global.anthropic.claude-sonnet-5',
-        FALLBACK_MODEL_ID: 'jp.anthropic.claude-opus-5-5',
+        MODEL_ID: 'global.moonshotai.kimi-k3',
+        FALLBACK_MODEL_ID: Match.absent(),
       }),
       AgentRuntimeArtifact: {
         CodeConfiguration: Match.objectLike({ Runtime: 'PYTHON_3_13', EntryPoint: ['main.py'] }),
