@@ -20,7 +20,8 @@ fi
 env_name="${ENV_NAME:-dev}"
 prefix="sakekasu-learning-${env_name}"
 # スタック名:リージョン。CloudFormation は使用中の Export を持つスタックを消せないため、
-# 参照する側（agent → backend → auth の順に参照している）を先に移す
+# 参照する側を先に移す（移行した時点では agent → backend → auth の順に参照していた。
+# いまの auth は共通ログインへの移行でどこからも参照されていない）
 stacks=(
   "${prefix}-agent:ap-northeast-1"
   "${prefix}-backend:ap-northeast-1"

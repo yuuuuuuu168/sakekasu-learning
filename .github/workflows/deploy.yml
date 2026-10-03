@@ -1,9 +1,9 @@
 # main への push で、インフラ・問題データ・フロントエンドをまとめてデプロイする。
 #
 # 1. テストとビルド（AWS の認証情報を入れる前に済ませる）
-# 2. cdkd deploy --all（Cognito / API / AgentCore / CloudFront）。CloudFormation を通さず API を直接呼ぶ
+# 2. cdkd deploy --all（旧 Cognito / API / AgentCore / CloudFront）。CloudFormation を通さず API を直接呼ぶ
 # 3. 問題データを非公開バケットへ同期
-# 4. スタックの出力から config.json を作り、フロントエンドをサイトのバケットへ同期
+# 4. スタックの出力と cdk.json の sharedAuth（共通ログイン）から config.json を作り、フロントエンドをサイトのバケットへ同期
 # 5. CloudFront のキャッシュを削除
 name: deploy
 

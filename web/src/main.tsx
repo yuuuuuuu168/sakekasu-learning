@@ -1,8 +1,11 @@
 import { Amplify } from 'aws-amplify';
+// マネージドログインから戻ったときに、URL の認可コードをトークンに換える処理を有効にする
+import 'aws-amplify/auth/enable-oauth-listener';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import { AuthGate } from './auth/AuthGate';
+import { amplifyAuthConfig } from './auth/oauth';
 import { Layout } from './components/Layout';
 import { ErrorMessage } from './components/Status';
 import { loadConfig } from './config';
@@ -27,15 +30,8 @@ const root = createRoot(document.getElementById('root')!);
 
 loadConfig()
   .then((config) => {
-    Amplify.configure({
-      Auth: {
-        Cognito: {
-          userPoolId: config.userPoolId,
-          userPoolClientId: config.userPoolClientId,
-          loginWith: { email: true },
-        },
-      },
-    });
+    // ログインは共通ログイン（マネージドログイン + 認可コード + PKCE）
+    Amplify.configure({ Auth: amplifyAuthConfig(config, window.location.origin) });
     root.render(
       <StrictMode>
         <AuthGate>

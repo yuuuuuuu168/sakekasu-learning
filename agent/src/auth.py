@@ -2,6 +2,10 @@
 
 Runtime の JWT オーソライザーでも検証済みだが、アプリ側でも検証して sub を取り出す
 （オーソライザーの設定ミスで素通しになっても、ここで止める）。
+
+トークンは共通ログイン（共通ユーザープール）が learning のクライアントに発行したもの。
+プール ID とクライアント ID は環境変数で受け取る（infra/lib/agent-stack.ts が cdk.json の
+context `sharedAuth` から入れる）。sub は認証の確認にだけ使い、どこにも保存しない。
 """
 
 from __future__ import annotations
@@ -17,8 +21,10 @@ log = logging.getLogger(__name__)
 
 
 def _issuer() -> str:
-    region = os.environ.get("AWS_REGION", "ap-northeast-1")
-    return f"https://cognito-idp.{region}.amazonaws.com/{os.environ['COGNITO_USER_POOL_ID']}"
+    pool_id = os.environ["COGNITO_USER_POOL_ID"]
+    # プール ID の頭がリージョン（ap-northeast-1_xxx）。Runtime と別リージョンのプールでも正しい発行者になる
+    region = pool_id.split("_", 1)[0]
+    return f"https://cognito-idp.{region}.amazonaws.com/{pool_id}"
 
 
 @lru_cache(maxsize=1)

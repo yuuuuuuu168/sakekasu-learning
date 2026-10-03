@@ -4,11 +4,16 @@
  *   デプロイ後に CI がスタックの出力から config.json を作って置く）
  *
  * ローカル開発では infra/scripts/write-web-config.ts で public/config.json を作る。
+ * ログインの接続先（userPoolId / userPoolClientId / authDomain）は infra/cdk.json の context `sharedAuth` の値。
  */
 export interface AppConfig {
   region: string;
+  /** 共通ログイン（共通ユーザープール）の ID */
   userPoolId: string;
+  /** 共通ユーザープールにある learning 用のアプリクライアント ID */
   userPoolClientId: string;
+  /** マネージドログインのドメイン（例: auth.sakekasu-builder.com。https:// は付けない） */
+  authDomain: string;
   apiUrl: string;
   agentRuntimeArn: string;
 }
