@@ -3,11 +3,11 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CfnOutput, Stack, type StackProps } from 'aws-cdk-lib';
 import * as agentcore from 'aws-cdk-lib/aws-bedrockagentcore';
-import type * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import type * as s3 from 'aws-cdk-lib/aws-s3';
 import { Asset } from 'aws-cdk-lib/aws-s3-assets';
 import type { Construct } from 'constructs';
+import { type SharedAuthConfig, sharedAuthRegion } from './shared-auth';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,8 +28,8 @@ export const AWS_KNOWLEDGE_MCP_URL = 'https://knowledge-mcp.global.api.aws';
 
 export interface AgentStackProps extends StackProps {
   envName: string;
-  userPool: cognito.IUserPool;
-  userPoolClient: cognito.IUserPoolClient;
+  /** 共通ログインの接続先（cdk.json の context `sharedAuth`） */
+  sharedAuth: SharedAuthConfig;
   questionsBucket: s3.IBucket;
   modelId?: string;
   fallbackModelId?: string;
@@ -38,7 +38,7 @@ export interface AgentStackProps extends StackProps {
 /**
  * AI チャット（AgentCore Runtime + Strands Agents）。
  *
- * ブラウザから Cognito のアクセストークンで直接呼び出す（JWT オーソライザー）。
+ * ブラウザから共通ログイン（Cognito）のアクセストークンで直接呼び出す（JWT オーソライザー）。
  * 問題の本文・正解・解説はクライアントから受け取らず、Runtime が非公開バケットから読む。
  */
 export class AgentStack extends Stack {
@@ -46,7 +46,7 @@ export class AgentStack extends Stack {
 
   constructor(scope: Construct, id: string, props: AgentStackProps) {
     super(scope, id, props);
-    const { envName, userPool, userPoolClient, questionsBucket } = props;
+    const { envName, sharedAuth, questionsBucket } = props;
     const modelId = props.modelId ?? DEFAULT_MODEL_ID;
     const fallbackModelId = props.fallbackModelId ?? DEFAULT_FALLBACK_MODEL_ID;
 
@@ -142,8 +142,10 @@ export class AgentStack extends Stack {
     );
     questionsBucket.grantRead(role);
 
+    // 共通ユーザープールが learning のクライアントに発行したトークンだけを通す。
+    // 旧ユーザープール（auth スタック）は切り戻し用に残してあるが、ここからは参照しない
     const discoveryUrl =
-      `https://cognito-idp.${this.region}.amazonaws.com/${userPool.userPoolId}` +
+      `https://cognito-idp.${sharedAuthRegion(sharedAuth)}.amazonaws.com/${sharedAuth.userPoolId}` +
       '/.well-known/openid-configuration';
 
     const runtime = new agentcore.CfnRuntime(this, 'Runtime', {
@@ -162,7 +164,7 @@ export class AgentStack extends Stack {
       authorizerConfiguration: {
         customJwtAuthorizer: {
           discoveryUrl,
-          allowedClients: [userPoolClient.userPoolClientId],
+          allowedClients: [sharedAuth.clientId],
         },
       },
       // アプリ側でも JWT を検証して sub を取り出すため、Authorization ヘッダーを通す
@@ -174,8 +176,8 @@ export class AgentStack extends Stack {
         MODEL_ID: modelId,
         ...(fallbackModelId ? { FALLBACK_MODEL_ID: fallbackModelId } : {}),
         QUESTIONS_BUCKET_NAME: questionsBucket.bucketName,
-        COGNITO_USER_POOL_ID: userPool.userPoolId,
-        COGNITO_CLIENT_ID: userPoolClient.userPoolClientId,
+        COGNITO_USER_POOL_ID: sharedAuth.userPoolId,
+        COGNITO_CLIENT_ID: sharedAuth.clientId,
         AWS_KNOWLEDGE_MCP_URL,
       },
     });

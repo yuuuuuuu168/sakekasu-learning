@@ -8,9 +8,16 @@ export interface AuthStackProps extends StackProps {
 }
 
 /**
- * ログイン基盤。招待制のため、セルフサインアップは無効にする。
- * ユーザーは管理者が admin-create-user で作成し、初回ログイン時にパスワードを変更してもらう。
- * （AI チャットは従量課金なので、誰でも登録できる状態にはしない）
+ * 旧ログイン基盤（このアプリ専用のユーザープール）。
+ *
+ * ログインは共通ログイン（sakekasu-integrated_environment の共通ユーザープール。cdk.json の
+ * context `sharedAuth`）に移した。API・エージェント・画面はもうこのスタックを参照しない。
+ * 切り戻しと、回答履歴の付け替え（旧 sub を調べる）のために残している（RETAIN・削除保護のまま）。
+ * データの付け替えが済んだら、別の PR でこのスタックを外す（手順は docs/shared-login.md）。
+ *
+ * cdkd で管理しているので、論理 ID を変える変更や、スタックを消す変更はしない。
+ *
+ * 招待制のため、セルフサインアップは無効にしている。
  */
 export class AuthStack extends Stack {
   readonly userPool: cognito.UserPool;
@@ -37,7 +44,7 @@ export class AuthStack extends Stack {
         tempPasswordValidity: Duration.days(7),
       },
       // MFA は必須。2要素目は認証アプリ（TOTP）だけにする（SMS は従量課金、メールは SES が要るため）。
-      // 未登録のユーザーはログイン時に登録を求められる（画面は web/src/auth/AuthGate.tsx）
+      // 未登録のユーザーはログイン時に登録を求められる（旧画面。いまの画面は共通ログインを使う）
       mfa: cognito.Mfa.REQUIRED,
       mfaSecondFactor: { otp: true, sms: false, email: false },
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
@@ -69,5 +76,11 @@ export class AuthStack extends Stack {
 
     new CfnOutput(this, 'UserPoolId', { value: this.userPool.userPoolId });
     new CfnOutput(this, 'UserPoolClientId', { value: this.userPoolClient.userPoolClientId });
+
+    // backend / agent がこのスタックを参照していたころに CDK が自動で作った Export を、同じ名前で残す。
+    // 参照をやめると CDK は Export を消そうとするが、CloudFormation と同じく「使用中の Export は消せない」
+    // 扱いになる環境でもデプロイが詰まらないよう、まずは残しておく（スタックを外す PR で一緒に消す）
+    this.exportValue(this.userPool.userPoolId);
+    this.exportValue(this.userPoolClient.userPoolClientId);
   }
 }

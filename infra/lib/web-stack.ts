@@ -18,6 +18,11 @@ export interface WebStackProps extends StackProps {
   hostedZoneId: string;
   /** API / 認証 / AI チャットのリージョン（CSP の connect-src に使う） */
   backendRegion: string;
+  /**
+   * 共通ログインのマネージドログインのドメイン（例: auth.sakekasu-builder.com）。
+   * ログイン後の認可コードとトークンの交換（/oauth2/token）を画面から fetch するため、CSP の connect-src に入れる
+   */
+  authDomain: string;
 }
 
 /**
@@ -32,7 +37,7 @@ export interface WebStackProps extends StackProps {
 export class WebStack extends Stack {
   constructor(scope: Construct, id: string, props: WebStackProps) {
     super(scope, id, props);
-    const { envName, domainName, hostedZoneId, backendRegion } = props;
+    const { envName, domainName, hostedZoneId, backendRegion, authDomain } = props;
 
     const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', {
       hostedZoneId,
@@ -79,6 +84,7 @@ export class WebStack extends Stack {
               "connect-src 'self'",
               `https://*.execute-api.${backendRegion}.amazonaws.com`,
               `https://cognito-idp.${backendRegion}.amazonaws.com`,
+              `https://${authDomain}`,
               `https://bedrock-agentcore.${backendRegion}.amazonaws.com`,
             ].join(' '),
             "frame-ancestors 'none'",

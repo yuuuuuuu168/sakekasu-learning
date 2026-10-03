@@ -2,7 +2,7 @@
 
 資格試験（AWS / OCI / Terraform ...）の問題演習サイト。<https://learning.sakekasu-builder.com/>
 
-- 招待制のログイン（Cognito）。MFA 必須（認証アプリの TOTP）。回答履歴をユーザーごとに記録し、直近2回の正誤で習熟度を判定する
+- 招待制のログイン（4 アプリ共通のログイン `auth.sakekasu-builder.com`。Cognito のマネージドログイン）。MFA 必須（認証アプリの TOTP）。回答履歴をユーザーごとに記録し、直近2回の正誤で習熟度を判定する
 - 問題文はそのまま、選択肢は毎回シャッフルして出題する。解説は回答後に折りたたみで表示する
 - 問題ごとに AI（Claude Sonnet）に相談できる。AWS 公式ドキュメントを MCP で参照しながら答える
 
@@ -22,7 +22,7 @@
 ```
 ブラウザ ──> CloudFront (us-east-1, OAC) ──> S3 (静的サイト)
    │
-   ├──> Cognito User Pool（招待制・SRP）
+   ├──> 共通ログイン（Cognito マネージドログイン。認可コード + PKCE）
    ├──> API Gateway HTTP API (JWT) ──> Lambda ──> DynamoDB（回答履歴）
    │                                        └──> S3（問題データ・非公開）
    └──> AgentCore Runtime (JWT, Strands) ──> Bedrock (Claude Sonnet)
@@ -37,11 +37,15 @@
 
 | スタック | リージョン | 内容 |
 |---|---|---|
-| `sakekasu-learning-dev-auth` | ap-northeast-1 | Cognito User Pool / App Client |
+| `sakekasu-learning-dev-auth` | ap-northeast-1 | 旧 Cognito User Pool / App Client（共通ログインに移行済み。切り戻しとデータの付け替え用に残している） |
 | `sakekasu-learning-dev-backend` | ap-northeast-1 | DynamoDB、問題データ用 S3、HTTP API + Lambda |
 | `sakekasu-learning-dev-agent` | ap-northeast-1 | AgentCore Runtime（Python 3.13, CodeZip） |
 | `sakekasu-learning-dev-web` | us-east-1 | ACM、S3、CloudFront、Route 53 レコード |
 | `sakekasu-learning-github-oidc` | ap-northeast-1 | GitHub Actions 用ロール（手動デプロイ） |
+
+ログインの接続先（共通ユーザープールの ID、learning 用のクライアント ID、ログイン画面のドメイン）は
+`infra/cdk.json` の context `sharedAuth` に置く。共通基盤（sakekasu-integrated_environment）のスタックとは参照でつながない。
+切り替えの経緯と回答履歴の付け替えの手順は [docs/shared-login.md](docs/shared-login.md) にある。
 
 github-oidc 以外のスタックは [cdkd](https://github.com/go-to-k/cdkd) でデプロイする。CloudFormation を通さず各サービスの API を直接呼ぶので速い。
 スタックの状態（リソースの対応表と出力）は CloudFormation ではなく S3 の `cdkd-state-232791540685` に置かれる。
@@ -164,21 +168,12 @@ AWS_PROFILE=sakekasu-builder aws bedrock get-foundation-model-availability --mod
 
 ## ユーザーの招待
 
-セルフサインアップは無効。管理者がユーザーを作ると、仮パスワードがメールで届く。
-初回ログインではパスワードの変更と、認証アプリ（Google Authenticator など）の登録を求められる。
+ユーザーはこのリポジトリではなく、共通ログインのユーザープールに作る
+（sakekasu-integrated_environment の `docs/identity.md` の「ユーザーを作る」）。セルフサインアップは無い。
+初回ログインでは、マネージドログインの画面でパスワードの変更と認証アプリ（Google Authenticator など）の登録を求められる。
 
-```bash
-USER_POOL_ID=$(cd infra && AWS_PROFILE=sakekasu-builder npx cdkd state show sakekasu-learning-dev-auth --json \
-  | jq -r '.state.outputs.UserPoolId')
-
-AWS_PROFILE=sakekasu-builder aws cognito-idp admin-create-user \
-  --user-pool-id "$USER_POOL_ID" \
-  --username user@example.com \
-  --user-attributes Name=email,Value=user@example.com Name=email_verified,Value=true \
-  --desired-delivery-mediums EMAIL
-```
-
-Cognito の既定のメール送信は1日あたりの上限が小さいため、大人数を招待する場合は SES の設定を検討する。
+旧ユーザープール（auth スタック）でユーザーを作る手順は使わない。旧ユーザープールで使っていた人の回答履歴は、
+[docs/shared-login.md](docs/shared-login.md) の手順で新しいアカウントへコピーする。
 
 ## ローカル開発
 
@@ -189,7 +184,7 @@ Cognito の既定のメール送信は1日あたりの上限が小さいため�
 # デプロイ済みの dev 環境に接続する config.json を作る
 cd infra && AWS_PROFILE=sakekasu-builder npx tsx scripts/write-web-config.ts ../web/public/config.json
 
-# フロントエンド（http://localhost:5173 は API の CORS で許可済み）
+# フロントエンド（http://localhost:5173 は API の CORS と、共通ログインの戻り先に登録済み）
 cd web && npm run dev
 
 # テスト

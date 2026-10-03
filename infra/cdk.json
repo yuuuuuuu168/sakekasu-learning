@@ -5,6 +5,11 @@
     "env": "dev",
     "domainName": "learning.sakekasu-builder.com",
     "hostedZoneId": "Z0055303DZV5QJJQ84LQ",
+    "sharedAuth": {
+      "domain": "auth.sakekasu-builder.com",
+      "userPoolId": "ap-northeast-1_yw1VDKtxW",
+      "clientId": "290il92ijts07ap3unkae5ql8o"
+    },
     "@aws-cdk/aws-lambda-nodejs:useLatestRuntimeVersion": true,
     "@aws-cdk/aws-s3:publicAccessBlockedByDefault": true,
     "@aws-cdk/aws-lambda:useCdkManagedLogGroup": true,

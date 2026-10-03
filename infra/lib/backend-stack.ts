@@ -4,20 +4,24 @@ import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from 'aws-
 import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpUserPoolAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
-import type * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import type { Construct } from 'constructs';
+import { type SharedAuthConfig, sharedAuthRegion } from './shared-auth';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export interface BackendStackProps extends StackProps {
   envName: string;
-  userPool: cognito.IUserPool;
-  userPoolClient: cognito.IUserPoolClient;
+  /**
+   * 共通ログインの接続先（cdk.json の context `sharedAuth`）。
+   * API はこのユーザープールが learning のクライアントに発行したアクセストークンだけを通す
+   */
+  sharedAuth: SharedAuthConfig;
   /** CORS で許可するオリジン */
   allowedOrigins: string[];
 }
@@ -32,7 +36,7 @@ export class BackendStack extends Stack {
 
   constructor(scope: Construct, id: string, props: BackendStackProps) {
     super(scope, id, props);
-    const { envName, userPool, userPoolClient, allowedOrigins } = props;
+    const { envName, sharedAuth, allowedOrigins } = props;
 
     // 問題の原本は Git にあり、CI が毎回 sync し直すため作り直しても失うものはない。
     // ただしバケット名を固定しているので、消してしまうと再作成までの間 CI が落ちる
@@ -86,8 +90,17 @@ export class BackendStack extends Stack {
     this.questionsBucket.grantRead(fn);
     this.progressTable.grantReadWriteData(fn);
 
+    // 共通ユーザープールは別のリポジトリ（sakekasu-integrated_environment）が持つので、ID から参照する。
+    // 旧ユーザープール（auth スタック）は切り戻し用に残してあるが、ここからは参照しない
+    const userPool = cognito.UserPool.fromUserPoolId(this, 'SharedUserPool', sharedAuth.userPoolId);
+    const userPoolClient = cognito.UserPoolClient.fromUserPoolClientId(
+      this,
+      'SharedUserPoolClient',
+      sharedAuth.clientId,
+    );
     const authorizer = new HttpUserPoolAuthorizer('CognitoAuthorizer', userPool, {
       userPoolClients: [userPoolClient],
+      userPoolRegion: sharedAuthRegion(sharedAuth),
     });
 
     this.httpApi = new apigw.HttpApi(this, 'HttpApi', {
