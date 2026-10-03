@@ -14,7 +14,8 @@
 {
   "verdict": "correct" | "incorrect",
   "title": "図のタイトル",
-  "groups": [{"id": "dev", "label": "開発アカウント", "x": 0, "y": 0, "w": 300, "h": 240}],
+  "groups": [{"id": "dev", "label": "開発アカウント", "x": 0, "y": 0, "w": 300, "h": 240,
+              "kind": "account" | "region" | "vpc" | "plain"}],
   "nodes": [{"id": "s3", "group": "dev", "icon": "s3", "label": "S3", "sub": "補足（改行は \\n）",
              "x": 40, "y": 60, "ng": false, "labelPos": "bottom" | "top" | "right"}],
   "edges": [{"from": "a", "to": "b", "label": "① 取得", "ng": false, "dashed": false,
@@ -131,6 +132,20 @@ GROUP_STYLE = (
     "align=left;spacingLeft=30;fontColor=#CD2264;dashed=0;"
 )
 
+# グループ枠の種類（"kind"）: account はアカウント、region はリージョン、vpc は VPC、plain はアイコン無しの枠（ステージなど）
+GROUP_STYLES = {
+    "account": GROUP_STYLE,
+    "region": GROUP_STYLE.replace("grIcon=mxgraph.aws4.group_account;strokeColor=#CD2264;", "grIcon=mxgraph.aws4.group_region;strokeColor=#00A4A6;")
+    .replace("fontColor=#CD2264;dashed=0;", "fontColor=#147EBA;dashed=1;"),
+    "vpc": GROUP_STYLE.replace("grIcon=mxgraph.aws4.group_account;strokeColor=#CD2264;", "grIcon=mxgraph.aws4.group_vpc2;strokeColor=#8C4FFF;")
+    .replace("fontColor=#CD2264;", "fontColor=#8C4FFF;"),
+    "plain": (
+        "rounded=0;whiteSpace=wrap;html=1;fontSize=13;fontStyle=1;container=1;pointerEvents=0;collapsible=0;"
+        "recursiveResize=0;fillColor=none;strokeColor=#879196;dashed=1;verticalAlign=top;align=left;spacingLeft=10;"
+        "fontColor=#545B64;"
+    ),
+}
+
 SIDES = {"right": (1, 0.5), "left": (0, 0.5), "top": (0.5, 0), "bottom": (0.5, 1)}
 
 
@@ -169,8 +184,9 @@ def build(spec: dict) -> str:
     top = 40
     bottom = top
     for g in spec.get("groups", []):
+        style = GROUP_STYLES[g.get("kind", "account")]
         cells.append(
-            f'<mxCell id="{g["id"]}" value="{esc(g["label"])}" style="{GROUP_STYLE}" vertex="1" parent="1">'
+            f'<mxCell id="{g["id"]}" value="{esc(g["label"])}" style="{style}" vertex="1" parent="1">'
             f'<mxGeometry x="{g["x"]}" y="{g["y"] + top}" width="{g["w"]}" height="{g["h"]}" as="geometry"/></mxCell>'
         )
         bottom = max(bottom, g["y"] + top + g["h"])
