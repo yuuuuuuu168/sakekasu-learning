@@ -1,13 +1,56 @@
 @import 'tailwindcss';
+@import '../../theme/sakekasu-theme.css';
 @plugin '@tailwindcss/typography';
 
+/*
+ * 色とフォントは共通テーマ（theme/sakekasu-theme.css、sakekasu-template から同期）の
+ * --sk-* を、このアプリの色名に割り当てて使う。ライト/ダークの切り替えも共通テーマが持つ。
+ * 画面では Tailwind の既定の色（slate や indigo）を直接書かず、ここの色名を使う。
+ */
 @theme {
-  --font-sans: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', system-ui, sans-serif;
+  --font-sans: var(--sk-font-sans);
+
+  --color-plane: var(--sk-bg);
+  --color-surface: var(--sk-surface);
+  --color-surface-2: var(--sk-surface-2);
+  --color-grid: var(--sk-border);
+  --color-ink: var(--sk-ink);
+  --color-ink-2: var(--sk-ink-2);
+  --color-muted: var(--sk-muted);
+
+  --color-accent: var(--sk-accent);
+  --color-accent-hover: var(--sk-accent-hover);
+  --color-accent-weak: var(--sk-accent-weak);
+
+  --color-success: var(--sk-success);
+  --color-warning: var(--sk-warning);
+  --color-danger: var(--sk-danger);
+
+  /* アクセントや正誤の色で塗った上の文字。ライトでは白、ダークでは夜色 */
+  --color-on-fill: var(--sk-accent-ink);
+}
+
+/* 解説の Markdown（typography）の色も共通テーマに合わせる。コードブロックは両モードで暗い地のまま */
+.prose-slate {
+  --tw-prose-body: var(--sk-ink-2);
+  --tw-prose-headings: var(--sk-ink);
+  --tw-prose-lead: var(--sk-ink-2);
+  --tw-prose-links: var(--sk-accent);
+  --tw-prose-bold: var(--sk-ink);
+  --tw-prose-counters: var(--sk-muted);
+  --tw-prose-bullets: var(--sk-border);
+  --tw-prose-hr: var(--sk-border);
+  --tw-prose-quotes: var(--sk-ink);
+  --tw-prose-quote-borders: var(--sk-gold-line);
+  --tw-prose-captions: var(--sk-muted);
+  --tw-prose-code: var(--sk-ink);
+  --tw-prose-th-borders: var(--sk-border);
+  --tw-prose-td-borders: var(--sk-border);
 }
 
 html {
   -webkit-text-size-adjust: 100%;
 }
 body {
-  @apply bg-slate-50 text-slate-800 antialiased;
+  @apply antialiased;
 }

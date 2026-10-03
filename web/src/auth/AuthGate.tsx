@@ -96,7 +96,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (checking) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-slate-400">
+      <div className="flex min-h-screen items-center justify-center text-muted">
         <LoaderCircle className="size-6 animate-spin" />
       </div>
     );
@@ -208,28 +208,28 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
   });
 
   const input =
-    'w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+    'w-full rounded-lg border border-grid bg-surface px-3 py-2.5 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent-weak';
   const button =
-    'flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50';
-  const link = 'text-sm text-indigo-600 hover:underline';
+    'flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 font-semibold text-on-fill hover:bg-accent-hover disabled:opacity-50';
+  const link = 'text-sm text-accent hover:underline';
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-2 text-center">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-indigo-600 text-white">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-accent text-on-fill">
             <GraduationCap className="size-7" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">sakekasu learning</h1>
-          <p className="text-sm text-slate-500">資格試験の問題演習</p>
+          <p className="text-sm text-muted">資格試験の問題演習</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-grid bg-surface p-6 shadow-sm">
           {notice && (
-            <p className="mb-4 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-700">{notice}</p>
+            <p className="mb-4 rounded-lg bg-accent-weak px-3 py-2 text-sm text-accent">{notice}</p>
           )}
           {error && (
-            <p role="alert" className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <p role="alert" className="mb-4 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
               {error}
             </p>
           )}
@@ -264,7 +264,7 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
                 <span className="text-sm font-medium">新しいパスワード</span>
                 <input className={input} type="password" autoComplete="new-password" required minLength={12}
                   value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-                <span className="text-xs text-slate-500">12文字以上で、大文字・小文字・数字を含めてください</span>
+                <span className="text-xs text-muted">12文字以上で、大文字・小文字・数字を含めてください</span>
               </label>
               <button className={button} disabled={busy}>
                 {busy && <LoaderCircle className="size-4 animate-spin" />}パスワードを設定してログイン
@@ -274,15 +274,15 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
 
           {view === 'totpSetup' && totpSetup && (
             <form onSubmit={handleTotp} className="space-y-4">
-              <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-600">
+              <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-2">
                 <li>認証アプリで下の QR コードを読み取る</li>
                 <li>アプリに表示された6桁のコードを入力する</li>
               </ol>
-              <img src={totpSetup.qr} alt="認証アプリ登録用の QR コード" className="mx-auto size-48 rounded-lg ring-1 ring-slate-200" />
-              <details className="text-xs text-slate-500">
+              <img src={totpSetup.qr} alt="認証アプリ登録用の QR コード" className="mx-auto size-48 rounded-lg ring-1 ring-grid" />
+              <details className="text-xs text-muted">
                 <summary className="cursor-pointer">QR コードを読み取れない場合</summary>
                 <p className="mt-2">アプリで「セットアップキーを入力」を選び、次のキーを入力してください。</p>
-                <code className="mt-1 block break-all rounded bg-slate-100 px-2 py-1.5 font-mono text-slate-700">
+                <code className="mt-1 block break-all rounded bg-surface-2 px-2 py-1.5 font-mono text-ink-2">
                   {totpSetup.secret}
                 </code>
               </details>
@@ -295,7 +295,7 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
 
           {view === 'totpCode' && (
             <form onSubmit={handleTotp} className="space-y-4">
-              <p className="text-sm text-slate-600">認証アプリに表示されている6桁のコードを入力してください。</p>
+              <p className="text-sm text-ink-2">認証アプリに表示されている6桁のコードを入力してください。</p>
               <TotpInput className={input} value={totpCode} onChange={setTotpCode} />
               <button className={button} disabled={busy || totpCode.trim().length !== 6}>
                 {busy && <LoaderCircle className="size-4 animate-spin" />}ログイン
@@ -337,7 +337,7 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
                 <span className="text-sm font-medium">新しいパスワード</span>
                 <input className={input} type="password" autoComplete="new-password" required minLength={12}
                   value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-                <span className="text-xs text-slate-500">12文字以上で、大文字・小文字・数字を含めてください</span>
+                <span className="text-xs text-muted">12文字以上で、大文字・小文字・数字を含めてください</span>
               </label>
               <button className={button} disabled={busy}>
                 {busy && <LoaderCircle className="size-4 animate-spin" />}パスワードを変更
@@ -345,7 +345,7 @@ function SignInScreen({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
             </form>
           )}
         </div>
-        <p className="mt-6 text-center text-xs text-slate-400">
+        <p className="mt-6 text-center text-xs text-muted">
           招待制のサイトです。アカウントは管理者が発行します。
         </p>
       </div>

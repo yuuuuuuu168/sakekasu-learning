@@ -118,7 +118,7 @@ export function QuestionPage() {
     <div className="flex flex-col gap-2 sm:flex-row">
       <button
         onClick={retry}
-        className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
+        className="flex items-center justify-center gap-2 rounded-xl bg-surface px-4 py-3 font-semibold text-ink-2 ring-1 ring-grid hover:bg-plane"
       >
         <RotateCcw className="size-4" />
         もう一度解く
@@ -126,7 +126,7 @@ export function QuestionPage() {
       {session.next ? (
         <button
           onClick={() => navigate(`${examPath}/q/${encodeURIComponent(session.next!)}`)}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700"
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 font-semibold text-on-fill hover:bg-accent-hover"
         >
           次の問題へ
           <ArrowRight className="size-4" />
@@ -134,7 +134,7 @@ export function QuestionPage() {
       ) : (
         <Link
           to={examPath}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700"
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 font-semibold text-on-fill hover:bg-accent-hover"
         >
           {session.position ? 'おつかれさまでした！一覧へ戻る' : '問題一覧へ'}
         </Link>
@@ -151,36 +151,36 @@ export function QuestionPage() {
   };
 
   const choiceClass: Record<string, string> = {
-    idle: 'ring-slate-200 bg-white hover:bg-slate-50',
-    picked: 'ring-2 ring-indigo-500 bg-indigo-50',
-    'correct-picked': 'ring-2 ring-emerald-500 bg-emerald-50',
-    'correct-missed': 'ring-2 ring-emerald-500 bg-white',
-    'wrong-picked': 'ring-2 ring-rose-500 bg-rose-50',
+    idle: 'ring-grid bg-surface hover:bg-plane',
+    picked: 'ring-2 ring-accent bg-accent-weak',
+    'correct-picked': 'ring-2 ring-success bg-success/10',
+    'correct-missed': 'ring-2 ring-success bg-surface',
+    'wrong-picked': 'ring-2 ring-danger bg-danger/10',
   };
 
   return (
     <div className="space-y-5 pb-24">
       <div className="flex items-center justify-between gap-2">
-        <Link to={examPath} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
+        <Link to={examPath} className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
           <ArrowLeft className="size-4" />
           問題一覧
         </Link>
         {session.position && (
-          <span className="text-sm tabular-nums text-slate-500">
+          <span className="text-sm tabular-nums text-muted">
             {session.position} / {session.total}
           </span>
         )}
       </div>
 
-      <article className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <article className="space-y-4 rounded-2xl border border-grid bg-surface p-5 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-slate-500">
+          <span className="text-sm font-semibold text-muted">
             問{question.number}
-            <span className="font-normal text-slate-400"> / {question.total}</span>
+            <span className="font-normal text-muted"> / {question.total}</span>
           </span>
           <MasteryChip mastery={(result?.progress ?? question.progress).mastery} />
           {multi && (
-            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+            <span className="rounded-full bg-accent-weak px-2 py-0.5 text-xs font-medium text-accent">
               {question.selectCount} つ選択
             </span>
           )}
@@ -202,14 +202,14 @@ export function QuestionPage() {
             >
               <span
                 className={`flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                  state === 'idle' ? 'bg-slate-100 text-slate-600' : state === 'picked' ? 'bg-indigo-600 text-white'
-                    : state.startsWith('correct') ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+                  state === 'idle' ? 'bg-surface-2 text-ink-2' : state === 'picked' ? 'bg-accent text-on-fill'
+                    : state.startsWith('correct') ? 'bg-success text-on-fill' : 'bg-danger text-on-fill'
                 }`}
               >
                 {state.startsWith('correct') ? <Check className="size-4" /> : state === 'wrong-picked' ? <X className="size-4" /> : LABELS[pos]}
               </span>
               <span className="min-w-0 flex-1 whitespace-pre-wrap leading-relaxed">
-                {result && <span className="mr-1 font-semibold text-slate-500">{LABELS[pos]}.</span>}
+                {result && <span className="mr-1 font-semibold text-muted">{LABELS[pos]}.</span>}
                 {question.choices[original]}
               </span>
             </button>
@@ -221,7 +221,7 @@ export function QuestionPage() {
         <button
           onClick={() => void submit()}
           disabled={selected.length !== question.selectCount || submitting}
-          className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className="w-full rounded-xl bg-accent px-4 py-3 font-semibold text-on-fill hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? '採点中…' : multi ? `回答する（${selected.length} / ${question.selectCount}）` : '回答する'}
         </button>
@@ -229,10 +229,10 @@ export function QuestionPage() {
         <>
           <div
             className={`flex items-center gap-3 rounded-2xl p-4 ${
-              result.correct ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
+              result.correct ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
             }`}
           >
-            <span className={`flex size-9 items-center justify-center rounded-full text-white ${result.correct ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+            <span className={`flex size-9 items-center justify-center rounded-full text-on-fill ${result.correct ? 'bg-success' : 'bg-danger'}`}>
               {result.correct ? <Check className="size-5" /> : <X className="size-5" />}
             </span>
             <div>
@@ -255,7 +255,7 @@ export function QuestionPage() {
                     setOpenExplanations(allOpen ? new Set() : new Set(displayOrder));
                   }
                 }
-                className="text-sm text-indigo-600 hover:underline"
+                className="text-sm text-accent hover:underline"
               >
                 {allOpen ? 'すべて閉じる' : 'すべて開く'}
               </button>
@@ -264,27 +264,27 @@ export function QuestionPage() {
               const correct = result.answers.includes(original);
               const open = openExplanations.has(original);
               return (
-                <div key={original} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div key={original} className="rounded-2xl border border-grid bg-surface shadow-sm">
                   <button
                     onClick={() => toggleExplanation(original)}
                     aria-expanded={open}
                     className="flex w-full items-center gap-2 p-4 text-left"
                   >
                     <span
-                      className={`rounded-md px-2 py-0.5 text-xs font-semibold text-white ${correct ? 'bg-emerald-600' : 'bg-slate-400'}`}
+                      className={`rounded-md px-2 py-0.5 text-xs font-semibold text-on-fill ${correct ? 'bg-success' : 'bg-muted'}`}
                     >
                       {correct ? '正解' : '不正解'}
                     </span>
                     <span className="font-semibold">選択肢 {LABELS[pos]}</span>
                     {selected.includes(original) && (
-                      <span className="text-xs text-slate-500">（あなたの回答）</span>
+                      <span className="text-xs text-muted">（あなたの回答）</span>
                     )}
                     <ChevronDown
-                      className={`ml-auto size-5 shrink-0 text-slate-400 transition ${open ? 'rotate-180' : ''}`}
+                      className={`ml-auto size-5 shrink-0 text-muted transition ${open ? 'rotate-180' : ''}`}
                     />
                   </button>
                   {open && (
-                    <div className="space-y-3 border-t border-slate-100 p-4">
+                    <div className="space-y-3 border-t border-grid p-4">
                       {original in diagrams && (
                         <DiagramImage
                           src={diagrams[original]}
@@ -306,7 +306,7 @@ export function QuestionPage() {
 
       <button
         onClick={() => setChatOpen(true)}
-        className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-slate-800"
+        className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-semibold text-on-fill shadow-lg hover:bg-ink-2"
       >
         <MessageCircle className="size-5" />
         AI に相談
@@ -319,10 +319,10 @@ export function QuestionPage() {
           onClick={() => setZoomedDiagram(null)}
           className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-slate-900/80 p-2 sm:p-6"
         >
-          <img src={zoomedDiagram} alt="図解" className="max-h-full max-w-full rounded-lg bg-white" />
+          <img src={zoomedDiagram} alt="図解" className="max-h-full max-w-full rounded-lg bg-surface" />
           <button
             onClick={() => setZoomedDiagram(null)}
-            className="absolute right-4 top-4 rounded-full bg-white/90 p-2 text-slate-700"
+            className="absolute right-4 top-4 rounded-full bg-surface/90 p-2 text-ink-2"
             aria-label="閉じる"
           >
             <X className="size-5" />
@@ -357,17 +357,17 @@ function DiagramImage({
 }) {
   if (src === null) {
     return (
-      <div className="flex h-32 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+      <div className="flex h-32 items-center justify-center rounded-lg bg-plane text-muted">
         <LoaderCircle className="size-5 animate-spin" />
       </div>
     );
   }
   if (src === 'error') {
-    return <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">図解を読み込めませんでした</p>;
+    return <p className="rounded-lg bg-plane px-3 py-2 text-xs text-muted">図解を読み込めませんでした</p>;
   }
   return (
     <button onClick={() => onZoom(src)} className="block w-full cursor-zoom-in" aria-label={`${alt}を拡大表示`}>
-      <img src={src} alt={alt} className="w-full rounded-lg ring-1 ring-slate-100" />
+      <img src={src} alt={alt} className="w-full rounded-lg ring-1 ring-grid" />
     </button>
   );
 }
