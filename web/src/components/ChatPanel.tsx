@@ -116,30 +116,30 @@ export function ChatPanel({
       />
       <aside
         aria-hidden={!open}
-        className={`fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-white shadow-2xl transition-transform sm:max-w-lg ${
+        className={`fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-surface shadow-2xl transition-transform sm:max-w-lg ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        <header className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+        <header className="flex items-center justify-between gap-2 border-b border-grid px-4 py-3">
           <div className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-full bg-indigo-600 text-white">
+            <span className="flex size-8 items-center justify-center rounded-full bg-accent text-on-fill">
               <Bot className="size-5" />
             </span>
             <div>
               <p className="text-sm font-semibold">AI に相談</p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted">
                 問{questionNumber}・{answered ? '回答済み' : '未回答（答えは伏せてヒントを出します）'}
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" aria-label="閉じる">
+          <button onClick={onClose} className="rounded-lg p-1.5 text-muted hover:bg-surface-2" aria-label="閉じる">
             <X className="size-5" />
           </button>
         </header>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
           {messages.length === 0 && (
-            <div className="space-y-3 text-sm text-slate-600">
+            <div className="space-y-3 text-sm text-ink-2">
               <p>
                 この問題について何でも聞いてください。AWS の仕様は公式ドキュメントを確認しながら答えます。
                 選択肢は画面と同じ A, B, C... で呼べます。
@@ -149,7 +149,7 @@ export function ChatPanel({
                   <button
                     key={s}
                     onClick={() => void send(s)}
-                    className="rounded-full bg-slate-100 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+                    className="rounded-full bg-surface-2 px-3 py-1.5 text-left text-xs text-ink-2 hover:bg-accent-weak hover:text-accent"
                   >
                     {s}
                   </button>
@@ -160,16 +160,16 @@ export function ChatPanel({
           {messages.map((m, i) =>
             m.role === 'user' ? (
               <div key={i} className="flex justify-end">
-                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-indigo-600 px-3.5 py-2 text-sm text-white">
+                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-accent px-3.5 py-2 text-sm text-on-fill">
                   {m.content}
                 </p>
               </div>
             ) : (
-              <div key={i} className="rounded-2xl rounded-bl-sm bg-slate-50 px-3.5 py-2.5">
+              <div key={i} className="rounded-2xl rounded-bl-sm bg-plane px-3.5 py-2.5">
                 {m.content ? (
                   <Markdown className="prose-sm">{m.content}</Markdown>
                 ) : (
-                  <span className="flex items-center gap-2 text-sm text-slate-400">
+                  <span className="flex items-center gap-2 text-sm text-muted">
                     <LoaderCircle className="size-4 animate-spin" />
                     ドキュメントを確認しながら考えています…
                   </span>
@@ -177,11 +177,11 @@ export function ChatPanel({
               </div>
             ),
           )}
-          {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+          {error && <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
           <div ref={bottomRef} />
         </div>
 
-        <form onSubmit={onSubmit} className="border-t border-slate-200 p-3">
+        <form onSubmit={onSubmit} className="border-t border-grid p-3">
           <div className="flex items-end gap-2">
             <textarea
               value={input}
@@ -190,13 +190,13 @@ export function ChatPanel({
               rows={2}
               maxLength={MAX_PROMPT_LENGTH}
               placeholder="質問を入力（Shift + Enter で改行）"
-              className="min-h-11 flex-1 resize-none rounded-xl border border-slate-300 px-3 py-2 text-base outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-sm"
+              className="min-h-11 flex-1 resize-none rounded-xl border border-grid px-3 py-2 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent-weak sm:text-sm"
             />
             {streaming ? (
               <button
                 type="button"
                 onClick={() => abortRef.current?.abort()}
-                className="flex size-11 items-center justify-center rounded-xl bg-slate-200 text-slate-700 hover:bg-slate-300"
+                className="flex size-11 items-center justify-center rounded-xl bg-surface-2 text-ink-2 hover:bg-grid"
                 aria-label="停止"
               >
                 <Square className="size-4" />
@@ -204,14 +204,14 @@ export function ChatPanel({
             ) : (
               <button
                 disabled={!input.trim()}
-                className="flex size-11 items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40"
+                className="flex size-11 items-center justify-center rounded-xl bg-accent text-on-fill hover:bg-accent-hover disabled:opacity-40"
                 aria-label="送信"
               >
                 <Send className="size-4" />
               </button>
             )}
           </div>
-          <p className="mt-1.5 text-[11px] text-slate-400">
+          <p className="mt-1.5 text-[11px] text-muted">
             AI の回答は誤りを含むことがあります。重要な点は参考リンク先の公式ドキュメントで確認してください。
           </p>
         </form>
