@@ -3,7 +3,7 @@ import { Link, Outlet } from 'react-router';
 import { useAuth } from '../auth/AuthGate';
 
 export function Layout() {
-  const { email, signOut } = useAuth();
+  const { signOut } = useAuth();
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-grid bg-surface/90 backdrop-blur">
@@ -15,7 +15,6 @@ export function Layout() {
             sakekasu learning
           </Link>
           <div className="flex min-w-0 items-center gap-3">
-            <span className="hidden truncate text-sm text-muted sm:block">{email}</span>
             <button
               onClick={() => void signOut()}
               className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-ink-2 hover:bg-surface-2"
