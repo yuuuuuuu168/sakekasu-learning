@@ -37,7 +37,6 @@
 
 | スタック | リージョン | 内容 |
 |---|---|---|
-| `sakekasu-learning-dev-auth` | ap-northeast-1 | 旧 Cognito User Pool / App Client（共通ログインに移行済み。切り戻しとデータの付け替え用に残している） |
 | `sakekasu-learning-dev-backend` | ap-northeast-1 | DynamoDB、問題データ用 S3、HTTP API + Lambda |
 | `sakekasu-learning-dev-agent` | ap-northeast-1 | AgentCore Runtime（Python 3.13, CodeZip） |
 | `sakekasu-learning-dev-web` | us-east-1 | ACM、S3、CloudFront、Route 53 レコード |
@@ -45,7 +44,7 @@
 
 ログインの接続先（共通ユーザープールの ID、learning 用のクライアント ID、ログイン画面のドメイン）は
 `infra/cdk.json` の context `sharedAuth` に置く。共通基盤（sakekasu-integrated_environment）のスタックとは参照でつながない。
-切り替えの経緯と回答履歴の付け替えの手順は [docs/shared-login.md](docs/shared-login.md) にある。
+切り替えの経緯と、旧ユーザープール（以前の auth スタック）を片付ける手順は [docs/shared-login.md](docs/shared-login.md) にある。
 
 github-oidc 以外のスタックは [cdkd](https://github.com/go-to-k/cdkd) でデプロイする。CloudFormation を通さず各サービスの API を直接呼ぶので速い。
 スタックの状態（リソースの対応表と出力）は CloudFormation ではなく S3 の `cdkd-state-232791540685` に置かれる。
@@ -150,7 +149,7 @@ GitHub Actions 用ロール（github-oidc スタック）をデプロイし、`c
 
 CloudFormation（`cdk deploy`）でデプロイ済みのスタックがあるときは、先に手元で cdkd へ移す
 （dev 環境は移行済み）。全リソースを Retain にしてから CloudFormation のスタックを消すので、
-Cognito のユーザーや回答履歴はそのまま残る。
+回答履歴などのデータはそのまま残る。
 
 ```bash
 cd infra && AWS_PROFILE=sakekasu-builder bash scripts/cdkd-stacks.sh migrate
@@ -181,8 +180,7 @@ AWS_PROFILE=sakekasu-builder aws bedrock get-foundation-model-availability --mod
 （sakekasu-integrated_environment の `docs/identity.md` の「ユーザーを作る」）。セルフサインアップは無い。
 初回ログインでは、マネージドログインの画面でパスワードの変更と認証アプリ（Google Authenticator など）の登録を求められる。
 
-旧ユーザープール（auth スタック）でユーザーを作る手順は使わない。旧ユーザープールで使っていた人の回答履歴は、
-[docs/shared-login.md](docs/shared-login.md) の手順で新しいアカウントへコピーする。
+このアプリ専用のユーザープール（以前の auth スタック）は外したので、そちらにはユーザーを作らない。
 
 ## ローカル開発
 

@@ -3,7 +3,6 @@ import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { AGENT_PACKAGE_DIR, AgentStack } from '../lib/agent-stack';
-import { AuthStack } from '../lib/auth-stack';
 import { BackendStack } from '../lib/backend-stack';
 import { parseSharedAuth } from '../lib/shared-auth';
 import { WebStack } from '../lib/web-stack';
@@ -19,7 +18,6 @@ const issuer = `https://cognito-idp.ap-northeast-1.amazonaws.com/${sharedAuth.us
 function synth() {
   const app = new cdk.App();
   const env = { account, region: 'ap-northeast-1' };
-  const auth = new AuthStack(app, 'auth', { env, envName: 'test', siteUrl: 'https://learning.example.com' });
   const backend = new BackendStack(app, 'backend', {
     env,
     envName: 'test',
@@ -41,7 +39,6 @@ function synth() {
     authDomain: sharedAuth.domain,
   });
   return {
-    auth: Template.fromStack(auth),
     backend: Template.fromStack(backend),
     agent: Template.fromStack(agent),
     web: Template.fromStack(web),
@@ -58,28 +55,22 @@ describe('stacks', () => {
     // synth は Lambda のバンドルとエージェントのパッケージ（数十 MB）のコピーを含み、CI では 10 秒を超えることがある
   }, 60_000);
 
-  it('旧 User Pool は切り戻し用に消さずに残す', () => {
-    t.auth.hasResource('AWS::Cognito::UserPool', {
-      DeletionPolicy: 'Retain',
-      Properties: Match.objectLike({
-        AdminCreateUserConfig: Match.objectLike({ AllowAdminCreateUserOnly: true }),
-        DeletionProtection: 'ACTIVE',
-        // MFA は必須で、2要素目は TOTP だけ
-        MfaConfiguration: 'ON',
-        EnabledMfas: ['SOFTWARE_TOKEN_MFA'],
-      }),
-    });
-    // 以前 backend / agent が使っていた Export を同じ名前で残す
-    const exports = Object.values(t.auth.toJSON().Outputs as Record<string, { Export?: unknown }>)
-      .filter((o) => o.Export);
-    expect(exports).toHaveLength(2);
+  it('このアプリはユーザープールを持たない（ログインは共通ログイン。旧 auth スタックは外した）', () => {
+    for (const template of [t.backend, t.agent, t.web]) {
+      template.resourceCountIs('AWS::Cognito::UserPool', 0);
+      template.resourceCountIs('AWS::Cognito::UserPoolClient', 0);
+    }
   });
 
-  it('API・エージェント・サイトは旧 User Pool（auth スタック）を参照しない', () => {
-    for (const template of [t.backend, t.agent, t.web]) {
-      const json = JSON.stringify(template.toJSON());
-      expect(json).not.toContain('auth:Exports');
-      expect(json).not.toContain('UserPool6BA7E5F2');
+  it('スタック間の参照はエージェントから backend の問題バケットへの分だけ', () => {
+    const imports = (template: Template) =>
+      [...JSON.stringify(template.toJSON()).matchAll(/"Fn::ImportValue":"([^"]+)"/g)].map((m) => m[1]);
+    expect(imports(t.backend)).toEqual([]);
+    expect(imports(t.web)).toEqual([]);
+    const agentImports = imports(t.agent);
+    expect(agentImports.length).toBeGreaterThan(0);
+    for (const name of agentImports) {
+      expect(name).toMatch(/^backend:ExportsOutput.*QuestionsBucket/);
     }
   });
 
@@ -180,7 +171,7 @@ describe('stacks', () => {
     });
 
     it('トピックはこのリポジトリで作らない（通知先の ARN は上のテストで文字列のまま確かめている）', () => {
-      for (const template of [t.backend, t.agent, t.auth]) {
+      for (const template of [t.backend, t.agent]) {
         template.resourceCountIs('AWS::SNS::Topic', 0);
       }
     });

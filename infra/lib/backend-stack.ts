@@ -93,7 +93,6 @@ export class BackendStack extends Stack {
     this.progressTable.grantReadWriteData(fn);
 
     // 共通ユーザープールは別のリポジトリ（sakekasu-integrated_environment）が持つので、ID から参照する。
-    // 旧ユーザープール（auth スタック）は切り戻し用に残してあるが、ここからは参照しない
     const userPool = cognito.UserPool.fromUserPoolId(this, 'SharedUserPool', sharedAuth.userPoolId);
     const userPoolClient = cognito.UserPoolClient.fromUserPoolClientId(
       this,

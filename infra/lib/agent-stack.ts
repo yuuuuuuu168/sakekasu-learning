@@ -145,7 +145,6 @@ export class AgentStack extends Stack {
     questionsBucket.grantRead(role);
 
     // 共通ユーザープールが learning のクライアントに発行したトークンだけを通す。
-    // 旧ユーザープール（auth スタック）は切り戻し用に残してあるが、ここからは参照しない
     const discoveryUrl =
       `https://cognito-idp.${sharedAuthRegion(sharedAuth)}.amazonaws.com/${sharedAuth.userPoolId}` +
       '/.well-known/openid-configuration';
