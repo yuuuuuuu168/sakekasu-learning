@@ -1,6 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
 import { AgentStack } from '../lib/agent-stack';
-import { AuthStack } from '../lib/auth-stack';
 import { BackendStack } from '../lib/backend-stack';
 import { GithubOidcStack } from '../lib/github-oidc-stack';
 import { parseSharedAuth } from '../lib/shared-auth';
@@ -30,9 +29,6 @@ if (app.node.tryGetContext('github-oidc') === 'true') {
   const siteUrl = `https://${domainName}`;
   const prefix = `sakekasu-learning-${envName}`;
   const env = { account, region };
-
-  // 旧ユーザープール。切り戻しとデータの付け替えのために残す（どのスタックからも参照しない）
-  new AuthStack(app, `${prefix}-auth`, { env, envName, siteUrl });
 
   const backend = new BackendStack(app, `${prefix}-backend`, {
     env,

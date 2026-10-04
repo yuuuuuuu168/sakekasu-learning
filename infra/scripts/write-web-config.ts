@@ -1,7 +1,7 @@
 /**
  * フロントエンドが起動時に読む config.json を作る。
  *
- * - ログインの接続先: infra/cdk.json の context `sharedAuth`（共通ログイン。旧 auth スタックは読まない）
+ * - ログインの接続先: infra/cdk.json の context `sharedAuth`（共通ログイン）
  * - API と AI チャットの接続先: デプロイ済みスタックの出力（cdkd の状態に記録されている）
  *
  * 使い方（infra/ で実行）:
