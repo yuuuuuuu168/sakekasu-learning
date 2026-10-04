@@ -16,8 +16,14 @@ const app = new cdk.App();
 // IAM ロールには付けない。CloudFormation から cdkd へ移したロールは物理名が CFN の命名のままで、
 // cdkd はロールを更新するたびに名前が変わったとみなして作り直す（2026-10-04 にタグを足しただけで
 // 作り直しが起き、Lambda が消えたロールを指して止まった）。ロールはガードレールでも
-// 名前の接頭辞で範囲を絞る
-cdk.Tags.of(app).add('App', 'learning', { excludeResourceTypes: ['AWS::IAM::Role'] });
+// 名前の接頭辞で範囲を絞る。
+//
+// AgentCore の Runtime にも付けない。CloudFormation の時代に付いた aws:cloudformation:* のタグが
+// 残っていて、cdkd はタグを更新するとそれも一緒に送り直し、aws: で始まるキーは付けられないと
+// 断られる（2026-10-04、sakekasu-learning-dev-agent のデプロイが失敗した）
+cdk.Tags.of(app).add('App', 'learning', {
+  excludeResourceTypes: ['AWS::IAM::Role', 'AWS::BedrockAgentCore::Runtime'],
+});
 
 const account = process.env.CDK_DEFAULT_ACCOUNT;
 const region = 'ap-northeast-1';
