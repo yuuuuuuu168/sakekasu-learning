@@ -122,7 +122,7 @@ describe('github-oidc', () => {
 
     it('他のアプリの cdkd の状態は書き換えられず、自分の状態は対象に入らない', () => {
       const resources = statement('DenyWritingOtherAppsState')?.Resource as string[];
-      expect(resources).toContain(`arn:aws:s3:::cdkd-state-${account}/cdkd/sakekasu-kakeibo-*`);
+      expect(resources).toContain(`arn:aws:s3:::cdkd-state-${account}/cdkd/sakekasu-kakeibo*`);
       expect(resources.some((r) => r.includes('learning'))).toBe(false);
     });
   });
