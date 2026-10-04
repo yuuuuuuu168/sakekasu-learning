@@ -149,6 +149,107 @@ describe('stacks', () => {
     const connectSrc = csp.split('; ').find((d) => d.startsWith('connect-src'));
     expect(connectSrc?.split(' ')).toContain('https://auth.example.com');
   });
+
+  describe('監視（共通基盤の通知先へ送るアラーム）', () => {
+    // スタックの account は実値なので、組み立てた ARN は文字列になる（スタックの出力は参照しない）
+    const topicArn = `arn:aws:sns:ap-northeast-1:${account}:sakekasu-integrated-alerts`;
+
+    function alarmsOf(template: Template) {
+      return Object.values(
+        template.findResources('AWS::CloudWatch::Alarm') as Record<
+          string,
+          { Properties: Record<string, unknown> }
+        >,
+      ).map((r) => r.Properties);
+    }
+    function alarmNamed(template: Template, name: string) {
+      const alarm = alarmsOf(template).find((a) => a.AlarmName === name);
+      expect(alarm, name).toBeDefined();
+      return alarm as Record<string, unknown>;
+    }
+
+    it('全アラームが共通基盤のトピックへ ALARM と OK を送り、名前が learning の接頭辞で始まる', () => {
+      const all = [...alarmsOf(t.backend), ...alarmsOf(t.agent)];
+      expect(all.length).toBeGreaterThanOrEqual(8);
+      for (const alarm of all) {
+        expect(alarm.AlarmName).toMatch(/^test-sakekasu-learning-/);
+        expect(alarm.AlarmActions, String(alarm.AlarmName)).toEqual([topicArn]);
+        expect(alarm.OKActions, String(alarm.AlarmName)).toEqual([topicArn]);
+        expect(alarm.AlarmDescription).toEqual(expect.any(String));
+      }
+    });
+
+    it('トピックはこのリポジトリで作らない（通知先の ARN は上のテストで文字列のまま確かめている）', () => {
+      for (const template of [t.backend, t.agent, t.auth]) {
+        template.resourceCountIs('AWS::SNS::Topic', 0);
+      }
+    });
+
+    it('サイト（us-east-1）にはアラームを置かない', () => {
+      t.web.resourceCountIs('AWS::CloudWatch::Alarm', 0);
+    });
+
+    it('API の Lambda のエラーとスロットリング', () => {
+      for (const [name, metricName] of [
+        ['test-sakekasu-learning-api-errors', 'Errors'],
+        ['test-sakekasu-learning-api-throttles', 'Throttles'],
+      ]) {
+        expect(alarmNamed(t.backend, name)).toMatchObject({
+          Namespace: 'AWS/Lambda',
+          MetricName: metricName,
+          Statistic: 'Sum',
+          Period: 300,
+          Threshold: 1,
+          EvaluationPeriods: 1,
+          ComparisonOperator: 'GreaterThanOrEqualToThreshold',
+          TreatMissingData: 'notBreaching',
+        });
+      }
+    });
+
+    it('HTTP API の 5xx は ApiId で 5 分に 3 回から', () => {
+      const alarm = alarmNamed(t.backend, 'test-sakekasu-learning-api-5xx');
+      expect(alarm).toMatchObject({
+        Namespace: 'AWS/ApiGateway',
+        MetricName: '5xx',
+        Threshold: 3,
+        TreatMissingData: 'notBreaching',
+      });
+      expect((alarm.Dimensions as { Name: string }[]).map((d) => d.Name)).toEqual(['ApiId']);
+    });
+
+    it('回答履歴のテーブルのスロットリングは読みと書きを足して見る', () => {
+      const alarm = alarmNamed(t.backend, 'test-sakekasu-learning-progress-throttles');
+      expect(alarm).toMatchObject({ Threshold: 1, TreatMissingData: 'notBreaching' });
+      const metrics = alarm.Metrics as {
+        Expression?: string;
+        MetricStat?: { Metric: { MetricName: string; Dimensions: { Name: string }[] } };
+      }[];
+      expect(metrics.find((m) => m.Expression)?.Expression).toBe('FILL(r, 0) + FILL(w, 0)');
+      const names = metrics.flatMap((m) => (m.MetricStat ? [m.MetricStat.Metric.MetricName] : []));
+      expect(names.sort()).toEqual(['ReadThrottleEvents', 'WriteThrottleEvents']);
+    });
+
+    it('AI チャットの Runtime のシステムエラー・スロットリング・認可失敗', () => {
+      for (const [name, metricName, threshold] of [
+        ['test-sakekasu-learning-agent-system-errors', 'SystemErrors', 1],
+        ['test-sakekasu-learning-agent-throttles', 'Throttles', 1],
+        ['test-sakekasu-learning-agent-auth-unauthorized', 'InboundAuthorizationFailure', 3],
+        ['test-sakekasu-learning-agent-auth-invalid-token', 'InboundAuthorizationFailure', 3],
+      ] as const) {
+        const alarm = alarmNamed(t.agent, name);
+        expect(alarm).toMatchObject({
+          Namespace: 'AWS/Bedrock-AgentCore',
+          MetricName: metricName,
+          Threshold: threshold,
+          TreatMissingData: 'notBreaching',
+        });
+        // ResourceId は同じスタックの Runtime の ARN
+        expect(JSON.stringify(alarm.Dimensions)).toContain('"Name":"ResourceId"');
+        expect(JSON.stringify(alarm.Dimensions)).toContain('AgentRuntimeArn');
+      }
+    });
+  });
 });
 
 describe('parseSharedAuth', () => {

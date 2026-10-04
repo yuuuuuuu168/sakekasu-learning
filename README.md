@@ -51,6 +51,15 @@ github-oidc 以外のスタックは [cdkd](https://github.com/go-to-k/cdkd) で
 スタックの状態（リソースの対応表と出力）は CloudFormation ではなく S3 の `cdkd-state-232791540685` に置かれる。
 github-oidc だけは CI 自身の権限を定義するため、手元から `cdk deploy`（CloudFormation）でデプロイする。
 
+## 監視
+
+アラームは backend と agent のスタックが持ち、共通基盤（sakekasu-integrated_environment）の SNS トピック
+`sakekasu-integrated-alerts` へ ALARM と OK の両方を送る。共通基盤がそれを Slack に流す。
+対象は API の Lambda（エラー・スロットリング）、HTTP API の 5xx、回答履歴の DynamoDB のスロットリング、
+AI チャットの Runtime（システムエラー・スロットリング・認可失敗）。アラーム一覧と閾値は
+[docs/monitoring.md](docs/monitoring.md)、送り方の約束は共通基盤の
+[docs/monitoring.md](https://github.com/yuuuuuuu168/sakekasu-integrated_environment/blob/main/docs/monitoring.md) にある。
+
 ## ディレクトリ
 
 ```
