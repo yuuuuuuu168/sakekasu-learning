@@ -71,7 +71,15 @@ jobs:
 
       - name: cdkd deploy
         working-directory: infra
-        run: npx cdkd deploy --all --yes
+        run: |
+          # cdkd はスタックが失敗しても終了コード 0 で抜けることがある（2026-10-04 の builder で、
+          # 自動ロールバックまで走ったのにステップは緑だった）。出力にも失敗が出ていないか確かめる
+          set -o pipefail
+          npx cdkd deploy --all --yes 2>&1 | tee "$RUNNER_TEMP/cdkd-deploy.log"
+          if grep -qE 'Failed: |node\(s\) failed|Rollback completed' "$RUNNER_TEMP/cdkd-deploy.log"; then
+            echo "::error::cdkd の出力に失敗が出ている（終了コードは 0）。上のログを確かめる"
+            exit 1
+          fi
 
       - name: 問題データの同期
         run: |
