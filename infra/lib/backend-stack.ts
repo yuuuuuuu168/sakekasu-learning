@@ -4,6 +4,7 @@ import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from 'aws-
 import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpUserPoolAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -11,6 +12,7 @@ import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import type { Construct } from 'constructs';
+import { SharedAlarms } from './shared-alerts';
 import { type SharedAuthConfig, sharedAuthRegion } from './shared-auth';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -134,6 +136,68 @@ export class BackendStack extends Stack {
     // 招待制の小規模利用なので、既定のスロットリングを低めにして暴走時の課金を抑える
     const stage = this.httpApi.defaultStage?.node.defaultChild as apigw.CfnStage;
     stage.defaultRouteSettings = { throttlingBurstLimit: 20, throttlingRateLimit: 10 };
+
+    // --- 監視（共通基盤のトピックへ ALARM と OK を送る。docs/monitoring.md）---
+    const alarms = new SharedAlarms(this, 'Alarms', { envName });
+    const fiveMinutes = Duration.minutes(5);
+
+    // ハンドラーは想定外の例外を 500 にして返すので、Errors に出るのはタイムアウトや
+    // 初期化の失敗など、ハンドラーの外で落ちたものだけ。1 回でも出たら見る
+    alarms.add('ApiErrors', {
+      name: 'api-errors',
+      description:
+        '学習 API の Lambda が異常終了しています（タイムアウトや起動時の失敗）。' +
+        `まず CloudWatch Logs の /aws/lambda/${envName}-sakekasu-learning-api を見る`,
+      metric: fn.metricErrors({ period: fiveMinutes, statistic: 'Sum' }),
+      threshold: 1,
+    });
+
+    alarms.add('ApiThrottles', {
+      name: 'api-throttles',
+      description:
+        '学習 API の Lambda がスロットリングされています（同時実行数の上限）。' +
+        'まず Lambda の ConcurrentExecutions と、同じアカウントの他のアプリの Lambda を見る',
+      metric: fn.metricThrottles({ period: fiveMinutes, statistic: 'Sum' }),
+      threshold: 1,
+    });
+
+    // ハンドラーの中で捕まえた例外（S3・DynamoDB の失敗など）は 500 になってここに出る。
+    // 一時的な 1 回で鳴らさないよう、5 分に 3 回から
+    alarms.add('Api5xx', {
+      name: 'api-5xx',
+      description:
+        '学習 API が 5xx を返しています（問題の表示や回答の記録に失敗しています）。' +
+        `まず CloudWatch Logs の /aws/lambda/${envName}-sakekasu-learning-api で internal error の直前のログを見る`,
+      metric: this.httpApi.metricServerError({ period: fiveMinutes, statistic: 'Sum' }),
+      threshold: 3,
+    });
+
+    // ThrottledRequests は Operation のディメンションつきでしか出ないので、
+    // テーブル単位で出る Read/WriteThrottleEvents を足し合わせて見る
+    const throttleMetric = (metricName: string) =>
+      new cloudwatch.Metric({
+        namespace: 'AWS/DynamoDB',
+        metricName,
+        dimensionsMap: { TableName: this.progressTable.tableName },
+        statistic: 'Sum',
+        period: fiveMinutes,
+      });
+    alarms.add('ProgressTableThrottles', {
+      name: 'progress-throttles',
+      description:
+        '回答履歴のテーブルで読み書きがスロットリングされています（回答の記録や習熟度の表示に失敗します）。' +
+        'まず DynamoDB の ReadThrottleEvents / WriteThrottleEvents と、API の 5xx を見る',
+      metric: new cloudwatch.MathExpression({
+        expression: 'FILL(r, 0) + FILL(w, 0)',
+        usingMetrics: {
+          r: throttleMetric('ReadThrottleEvents'),
+          w: throttleMetric('WriteThrottleEvents'),
+        },
+        label: 'ThrottleEvents',
+        period: fiveMinutes,
+      }),
+      threshold: 1,
+    });
 
     new CfnOutput(this, 'ApiUrl', { value: this.httpApi.apiEndpoint });
     new CfnOutput(this, 'QuestionsBucketName', { value: this.questionsBucket.bucketName });

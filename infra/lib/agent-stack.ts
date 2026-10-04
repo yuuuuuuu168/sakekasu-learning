@@ -1,12 +1,14 @@
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CfnOutput, Stack, type StackProps } from 'aws-cdk-lib';
+import { CfnOutput, Duration, Stack, type StackProps } from 'aws-cdk-lib';
 import * as agentcore from 'aws-cdk-lib/aws-bedrockagentcore';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import type * as s3 from 'aws-cdk-lib/aws-s3';
 import { Asset } from 'aws-cdk-lib/aws-s3-assets';
 import type { Construct } from 'constructs';
+import { SharedAlarms } from './shared-alerts';
 import { type SharedAuthConfig, sharedAuthRegion } from './shared-auth';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -182,6 +184,56 @@ export class AgentStack extends Stack {
       },
     });
     runtime.node.addDependency(role);
+
+    // --- 監視（共通基盤のトピックへ ALARM と OK を送る。docs/monitoring.md）---
+    // AgentCore Runtime の指標は名前空間 AWS/Bedrock-AgentCore、ディメンション ResourceId（Runtime の ARN）。
+    // sakekasu-builder のソムリエと同じ形で、builder では実際にこの形で出ている
+    const alarms = new SharedAlarms(this, 'Alarms', { envName });
+    const runtimeLogs = 'ロググループ /aws/bedrock-agentcore/runtimes/sakekasu_learning_*';
+    const agentCoreMetric = (metricName: string, extra: Record<string, string> = {}) =>
+      new cloudwatch.Metric({
+        namespace: 'AWS/Bedrock-AgentCore',
+        metricName,
+        dimensionsMap: { ResourceId: runtime.attrAgentRuntimeArn, ...extra },
+        statistic: 'Sum',
+        period: Duration.minutes(5),
+      });
+
+    alarms.add('AgentSystemErrors', {
+      name: 'agent-system-errors',
+      description:
+        'AI チャットの Runtime がシステムエラーを返しています（チャットが応答しません）。' +
+        `まず ${runtimeLogs} と、モデル（${modelId}）の利用制限を見る`,
+      metric: agentCoreMetric('SystemErrors'),
+      threshold: 1,
+    });
+
+    alarms.add('AgentThrottles', {
+      name: 'agent-throttles',
+      description:
+        'AI チャットの Runtime がスロットリングされています。' +
+        'まず AgentCore のクォータ（同時セッション数・呼び出しレート）と、短時間に連続して呼ばれていないかを見る',
+      metric: agentCoreMetric('Throttles'),
+      threshold: 1,
+    });
+
+    // 認可の失敗。共通ログインへ移った直後なので、allowedClients やユーザープールの取り違えで
+    // 正規の利用者が全員はじかれる事故をここで拾う。トークン切れの単発で鳴らないよう、5 分に 3 回から
+    // （builder のソムリエと同じ閾値）。例外の種類はディメンション ExceptionType で分かれて出る
+    for (const [id, name, exceptionType] of [
+      ['AgentAuthUnauthorized', 'agent-auth-unauthorized', 'UnauthorizedInboundTokenException'],
+      ['AgentAuthInvalidToken', 'agent-auth-invalid-token', 'InvalidInboundTokenException'],
+    ] as const) {
+      alarms.add(id, {
+        name,
+        description:
+          `AI チャットの Runtime がトークンを拒否しています（${exceptionType}）。` +
+          '利用者はチャットを使えません。まず Runtime の allowedClients と discoveryUrl が ' +
+          'cdk.json の sharedAuth（共通ログインのユーザープールと learning のクライアント ID）と合っているかを見る',
+        metric: agentCoreMetric('InboundAuthorizationFailure', { ExceptionType: exceptionType }),
+        threshold: 3,
+      });
+    }
 
     this.runtimeArn = runtime.attrAgentRuntimeArn;
     new CfnOutput(this, 'RuntimeArn', { value: runtime.attrAgentRuntimeArn });
