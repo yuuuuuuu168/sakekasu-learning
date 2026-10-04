@@ -7,6 +7,13 @@ import { WebStack } from '../lib/web-stack';
 
 const app = new cdk.App();
 
+// 全リソースに App タグを付ける。アプリごとのコストを Cost Explorer で分けるため。
+// デプロイ用ロールに「他のアプリのタグが付いたリソースには触れない」ガードレールを足す
+// 予定で、その判定にもこのタグを使う。ガードレールはまだ無い（次の段で足す）ので、
+// それまではタグを付けただけでは何も守られない。4 アプリと共通基盤が同じアカウントに
+// 同居していて、名前の接頭辞では分けきれないためタグで見分ける
+cdk.Tags.of(app).add('App', 'learning');
+
 const account = process.env.CDK_DEFAULT_ACCOUNT;
 const region = 'ap-northeast-1';
 /** CloudFront 用の ACM 証明書は us-east-1 にしか置けない */
