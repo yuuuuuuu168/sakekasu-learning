@@ -67,6 +67,8 @@ export class GithubOidcStack extends Stack {
         account: this.account,
         app: 'learning',
         resourceNamePrefix: 'sakekasu-learning-',
+        // agent-stack.ts の agentRuntimeName（sakekasu_learning_<env>_tutor）。Runtime の名前は _ しか使えない
+        agentRuntimeNamePrefix: 'sakekasu_learning_',
         protectedRoleNames: [
           'sakekasu-learning-github-actions-deploy',
           'sakekasu-learning-cdkd-deploy',

@@ -107,6 +107,19 @@ describe('github-oidc', () => {
       ]);
     });
 
+    // Runtime には App タグが無いので、タグの Deny では他のアプリの Runtime を守れない
+    it('AgentCore Runtime は sakekasu_learning_ の外では変更・削除できない', () => {
+      expect(statement('DenyAgentRuntimesOutsideApp')?.NotResource).toEqual(
+        `arn:aws:bedrock-agentcore:*:${account}:runtime/sakekasu_learning_*`,
+      );
+    });
+
+    it('IAM Identity Center のディレクトリ（sso-directory）にも触れない', () => {
+      expect(statement('DenyIdentityAndAccountControl')?.Action).toEqual(
+        expect.arrayContaining(['sso:*', 'sso-directory:*', 'identitystore:*']),
+      );
+    });
+
     it('他のアプリの cdkd の状態は書き換えられず、自分の状態は対象に入らない', () => {
       const resources = statement('DenyWritingOtherAppsState')?.Resource as string[];
       expect(resources).toContain(`arn:aws:s3:::cdkd-state-${account}/cdkd/sakekasu-kakeibo-*`);

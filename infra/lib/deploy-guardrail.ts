@@ -14,7 +14,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
  *
  * - 他のアプリの App タグが付いたリソースには触れない（読み取りも含めて拒否する）
  * - 他のアプリの App タグを付けない（このアプリの値以外のタグを付けて作る・付け替える）
- * - IAM ロールは App タグを付けていない（理由は bin/app.ts）ので、名前の接頭辞で絞る
+ * - IAM ロールと AgentCore Runtime は App タグを付けていない（理由は bin/app.ts）ので、名前の接頭辞で絞る
  * - GitHub Actions のロール自身は書き換えない（接頭辞の範囲に入ってしまうため、別に止める）
  * - IAM ユーザー・アクセスキー・MFA・ID プロバイダー、Organizations、アカウント設定、
  *   CloudTrail（証跡と CloudTrail Lake）の停止や削除には触れない。どのアプリのデプロイにも要らない
@@ -32,6 +32,11 @@ export interface DeployGuardrailProps {
   resourceNamePrefix: string;
   /** 書き換えさせない GitHub Actions のロールの名前 */
   protectedRoleNames: string[];
+  /**
+   * このアプリの AgentCore Runtime の名前の接頭辞。Runtime には App タグを付けていない
+   * （理由は bin/app.ts）ので、名前で絞る。渡すと、この接頭辞の外の Runtime の変更・削除を拒否する
+   */
+  agentRuntimeNamePrefix?: string;
 }
 
 /**
@@ -70,13 +75,32 @@ const ROLE_WRITE_ACTIONS = [
 ];
 
 export function deployGuardrailStatements(props: DeployGuardrailProps): iam.PolicyStatement[] {
-  const { account, app, resourceNamePrefix, protectedRoleNames } = props;
+  const { account, app, resourceNamePrefix, protectedRoleNames, agentRuntimeNamePrefix } = props;
   const stateBucket = `arn:aws:s3:::cdkd-state-${account}`;
   const otherStacks = Object.entries(CDKD_STACK_NAME_PATTERNS)
     .filter(([name]) => name !== app)
     .flatMap(([, patterns]) => patterns);
 
+  // AgentCore Runtime の ARN は runtime/<名前>-<ランダム>。エンドポイントはその下（runtime/<id>/runtime-endpoint/...）
+  const agentRuntimeStatements = agentRuntimeNamePrefix
+    ? [
+        new iam.PolicyStatement({
+          sid: 'DenyAgentRuntimesOutsideApp',
+          effect: iam.Effect.DENY,
+          actions: [
+            'bedrock-agentcore:UpdateAgentRuntime',
+            'bedrock-agentcore:DeleteAgentRuntime',
+            'bedrock-agentcore:CreateAgentRuntimeEndpoint',
+            'bedrock-agentcore:UpdateAgentRuntimeEndpoint',
+            'bedrock-agentcore:DeleteAgentRuntimeEndpoint',
+          ],
+          notResources: [`arn:aws:bedrock-agentcore:*:${account}:runtime/${agentRuntimeNamePrefix}*`],
+        }),
+      ]
+    : [];
+
   return [
+    ...agentRuntimeStatements,
     new iam.PolicyStatement({
       sid: 'DenyOtherAppsResources',
       effect: iam.Effect.DENY,
@@ -131,6 +155,7 @@ export function deployGuardrailStatements(props: DeployGuardrailProps): iam.Poli
         'organizations:*',
         'account:*',
         'sso:*',
+        'sso-directory:*',
         'identitystore:*',
         'cloudtrail:DeleteTrail',
         'cloudtrail:StopLogging',
