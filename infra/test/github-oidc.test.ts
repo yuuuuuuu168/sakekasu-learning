@@ -67,7 +67,12 @@ describe('github-oidc', () => {
   });
 
   it('deploy ロールは CDK のブートストラップロールを引き受けない（cdkd 移行後は不要）', () => {
-    expect(JSON.stringify(t.findResources('AWS::IAM::Policy'))).not.toContain('cdk-hnb659fds');
+    // ガードレール（Deny）は bootstrap の資産置き場の名前を含むので、許可の文だけを見る
+    const allows = Object.values(t.findResources('AWS::IAM::Policy')).flatMap((p) =>
+      (p.Properties.PolicyDocument.Statement as { Effect: string }[]).filter((s) => s.Effect === 'Allow'),
+    );
+    expect(allows.length).toBeGreaterThan(0);
+    expect(JSON.stringify(allows)).not.toContain('cdk-hnb659fds');
   });
 
   describe('cdkd 用ロールのガードレール', () => {
