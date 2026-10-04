@@ -70,6 +70,50 @@ describe('github-oidc', () => {
     expect(JSON.stringify(t.findResources('AWS::IAM::Policy'))).not.toContain('cdk-hnb659fds');
   });
 
+  describe('cdkd 用ロールのガードレール', () => {
+    const guardrail = Object.values(t.findResources('AWS::IAM::Policy', {
+      Properties: { PolicyName: 'deploy-guardrail' },
+    }));
+    const statement = (sid: string) =>
+      (guardrail[0].Properties.PolicyDocument.Statement as Record<string, unknown>[]).find((s) => s.Sid === sid);
+
+    it('cdkd 用ロールにだけ付き、中身は Deny だけ', () => {
+      expect(guardrail).toHaveLength(1);
+      expect(guardrail[0].Properties.Roles).toEqual([{ Ref: expect.stringMatching(/^CdkdRole/) }]);
+      const statements = guardrail[0].Properties.PolicyDocument.Statement as { Effect: string }[];
+      expect(statements.every((s) => s.Effect === 'Deny')).toBe(true);
+    });
+
+    it('他のアプリの App タグが付いたリソースと、他のアプリの App タグの付与を拒否する', () => {
+      expect(statement('DenyOtherAppsResources')?.Condition).toEqual({
+        Null: { 'aws:ResourceTag/App': 'false' },
+        StringNotEquals: { 'aws:ResourceTag/App': 'learning' },
+      });
+      expect(statement('DenyForeignAppTag')?.Condition).toEqual({
+        Null: { 'aws:RequestTag/App': 'false' },
+        StringNotEquals: { 'aws:RequestTag/App': 'learning' },
+      });
+    });
+
+    it('IAM ロールは sakekasu-learning- の外では作り替えられず、GitHub Actions のロールは別に守る', () => {
+      expect(statement('DenyRolesOutsideApp')?.NotResource).toEqual([
+        `arn:aws:iam::${account}:role/sakekasu-learning-*`,
+        `arn:aws:iam::${account}:policy/sakekasu-learning-*`,
+      ]);
+      expect(statement('DenyTamperingWithGithubActionsRoles')?.Resource).toEqual([
+        `arn:aws:iam::${account}:role/sakekasu-learning-github-actions-deploy`,
+        `arn:aws:iam::${account}:role/sakekasu-learning-cdkd-deploy`,
+        `arn:aws:iam::${account}:role/sakekasu-learning-github-actions-diff`,
+      ]);
+    });
+
+    it('他のアプリの cdkd の状態は書き換えられず、自分の状態は対象に入らない', () => {
+      const resources = statement('DenyWritingOtherAppsState')?.Resource as string[];
+      expect(resources).toContain(`arn:aws:s3:::cdkd-state-${account}/cdkd/sakekasu-kakeibo-*`);
+      expect(resources.some((r) => r.includes('learning'))).toBe(false);
+    });
+  });
+
   it('IAM ロールの description は ASCII だけ（日本語だとデプロイが 400 で落ちる）', () => {
     const roles = Object.values(t.findResources('AWS::IAM::Role'));
     expect(roles.length).toBeGreaterThan(0);

@@ -1,6 +1,7 @@
 import { CfnOutput, Duration, Stack, type StackProps } from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import type { Construct } from 'constructs';
+import { deployGuardrailStatements } from './deploy-guardrail';
 
 export interface GithubOidcStackProps extends StackProps {
   envName: string;
@@ -23,7 +24,8 @@ export interface GithubOidcStackProps extends StackProps {
  * - deploy: main への push でだけ使える。cdkd 用ロールの引き受けと、
  *           サイト・問題データの同期、CloudFront のキャッシュ削除だけを許可する
  * - cdkd:   deploy ロールからだけ引き受けられる。cdkd は CloudFormation を通さず各サービスの API を
- *           直接呼ぶため、デプロイするリソースすべての権限が要る。CDK の cfn-exec ロールと同じく管理者権限
+ *           直接呼ぶため、デプロイするリソースすべての権限が要る。CDK の cfn-exec ロールと同じく管理者権限。
+ *           その上に、他のアプリのリソースに触れないためのガードレール（Deny だけ。deploy-guardrail.ts）を重ねる
  * - diff:   PR でだけ使える。cdkd diff 用に、このアプリの cdkd の状態だけを読める（AWS のリソースやデータは読めない）
  */
 export class GithubOidcStack extends Stack {
@@ -57,6 +59,20 @@ export class GithubOidcStack extends Stack {
       assumedBy: new iam.ArnPrincipal(deployRole.roleArn),
       maxSessionDuration: Duration.hours(1),
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AdministratorAccess')],
+    });
+    new iam.Policy(this, 'CdkdGuardrail', {
+      policyName: 'deploy-guardrail',
+      roles: [cdkdRole],
+      statements: deployGuardrailStatements({
+        account: this.account,
+        app: 'learning',
+        resourceNamePrefix: 'sakekasu-learning-',
+        protectedRoleNames: [
+          'sakekasu-learning-github-actions-deploy',
+          'sakekasu-learning-cdkd-deploy',
+          'sakekasu-learning-github-actions-diff',
+        ],
+      }),
     });
     deployRole.addToPolicy(
       new iam.PolicyStatement({
