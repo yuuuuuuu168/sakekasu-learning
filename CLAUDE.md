@@ -74,7 +74,8 @@ Identity Center のユーザーがグループ `sakekasu` に入っているか�
 - データ系リソース（DynamoDB、Cognito、問題バケット）は RETAIN
 - Lambda の LogGroup は明示的に作り、保持は 1 か月
 - API の入出力を変えるときは `shared/types.ts` を直し、web と infra の両方で型チェックを通す
-- 問題メモの形式は `content/FORMAT.md`。変換ロジックは `infra/scripts/questions/parse.ts`
+- 問題データ（問題文・選択肢・解説・図解とその設計 JSON）はこのリポジトリに置かない。非公開リポジトリ `yuuuuuuu168/sakekasu-learning-content` に置き、`content/`（.gitignore 済み）に clone して使う。テストやドキュメントの例に本物の問題を写さない（[docs/question-data.md](docs/question-data.md)）
+- 問題メモの形式は `docs/question-format.md`、図解の決まりは `docs/question-diagrams.md`。変換ロジックは `infra/scripts/questions/parse.ts`
 - 解説中の「選択肢 N」は原本の番号。画面では選択肢をシャッフルするので、表示時に A, B, C... へ置き換える（web: `src/lib/choices.ts`、agent: `question_context.py`）
 
 ## テスト

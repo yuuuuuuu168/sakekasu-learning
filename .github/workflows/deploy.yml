@@ -1,6 +1,6 @@
 # main への push で、インフラ・問題データ・フロントエンドをまとめてデプロイする。
 #
-# 1. テストとビルド（AWS の認証情報を入れる前に済ませる）
+# 1. テストとビルド（AWS の認証情報を入れる前に済ませる）。問題データは非公開リポジトリから取得する
 # 2. cdkd deploy --all（API / AgentCore / CloudFront）。CloudFormation を通さず API を直接呼ぶ
 # 3. 問題データを非公開バケットへ同期
 # 4. スタックの出力と cdk.json の sharedAuth（共通ログイン）から config.json を作り、フロントエンドをサイトのバケットへ同期
@@ -11,6 +11,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # 問題データのリポジトリ（sakekasu-learning-content）の main が更新されたとき、そちらから呼ばれる
+  repository_dispatch:
+    types: [questions-updated]
 
 permissions:
   id-token: write
@@ -32,6 +35,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # 問題データは非公開リポジトリにある（docs/question-data.md）。読み取り専用の deploy key で取得する
+      - name: 問題データの取得
+        uses: actions/checkout@v7
+        with:
+          repository: yuuuuuuu168/sakekasu-learning-content
+          ssh-key: ${{ secrets.QUESTIONS_DEPLOY_KEY }}
+          path: content
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 22
