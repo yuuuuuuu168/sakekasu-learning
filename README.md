@@ -62,7 +62,7 @@ AI チャットの Runtime（システムエラー・スロットリング・認
 ## ディレクトリ
 
 ```
-content/   問題メモ（Markdown）。<分野>/<資格>/*.md
+content/   問題データ（非公開リポジトリ sakekasu-learning-content の clone。このリポジトリには入れない）
 shared/    web と Lambda で共有する型・習熟度判定
 web/       フロントエンド（React 19 / Vite / Tailwind CSS v4 / aws-amplify）
 infra/     CDK（TypeScript）、API Lambda、問題ビルドスクリプト
@@ -70,6 +70,11 @@ agent/     AI 家庭教師（Strands Agents / AgentCore Runtime）
 ```
 
 ## 問題の追加
+
+問題文・選択肢・解説・図解は、非公開リポジトリ [sakekasu-learning-content](https://github.com/yuuuuuuu168/sakekasu-learning-content)
+にだけ置く。このリポジトリには入れない（CI の `no-question-data` が止める）。
+手元では `content/` に clone して作業する（`git clone git@github.com:yuuuuuuu168/sakekasu-learning-content.git content`）。
+仕組みと初期設定は [docs/question-data.md](docs/question-data.md)。以下のパスは `content/`（content リポジトリ）の中のもの。
 
 1. `content/<分野>/category.json` と `content/<分野>/<資格>/exam.json` を用意する（初回のみ）
 
@@ -81,9 +86,9 @@ agent/     AI 家庭教師（Strands Agents / AgentCore Runtime）
    ```
 
    ディレクトリ名は URL に使うため英小文字・数字・ハイフンのみ。
-2. 問題メモ（[content/FORMAT.md](content/FORMAT.md) の形式）を `content/<分野>/<資格>/` に置く。ファイルは複数に分けてよい
+2. 問題メモ（[docs/question-format.md](docs/question-format.md) の形式）を `content/<分野>/<資格>/` に置く。ファイルは複数に分けてよい
 3. 形式チェックを通す: `cd infra && npm run check:questions`
-4. main にマージすると CI が JSON に変換して S3 に同期する
+4. content リポジトリで PR を作り、main にマージすると、このリポジトリの deploy が呼ばれて JSON に変換し、非公開の S3 バケットに同期する
 
 形式チェックでは、解説の欠け・正解ゼロ・「（2 つ選択）」と正解数の不一致・問題番号の重複を検出して失敗させる。
 
@@ -91,6 +96,7 @@ agent/     AI 家庭教師（Strands Agents / AgentCore Runtime）
 
 `content/<分野>/<資格>/diagrams/<問題番号>/<問題番号>_選択肢<番号>_<正解|不正解>.drawio.png`（例: `DOP-2003/DOP-2003_選択肢1_正解.drawio.png`）に置くと、回答後にその選択肢の解説カードを開いたときに、解説文の上に表示される（回答したことのない問題には API が返さない）。
 
+- 図の決まりごとは [docs/question-diagrams.md](docs/question-diagrams.md)
 - 図は手で描かず、設計（JSON）から `scripts/make-diagram.py` で作る。見た目（正解・不正解の札、✕ の付け方、下のポイント欄）がそろう
   - 設計: `content/<分野>/<資格>/diagrams/src/<問題番号>_選択肢<番号>.json`（形式はスクリプト冒頭のコメント）
   - 実行: `python3 scripts/make-diagram.py content/aws/dop-c02/diagrams/src/DOP-2003_*.json`
@@ -185,6 +191,9 @@ AWS_PROFILE=sakekasu-builder aws bedrock get-foundation-model-availability --mod
 ## ローカル開発
 
 ```bash
+# 問題データ（非公開リポジトリ。.gitignore 済み）
+git clone git@github.com:yuuuuuuu168/sakekasu-learning-content.git content
+
 # 依存
 (cd infra && npm ci) && (cd web && npm ci) && (cd agent && uv sync --group dev)
 
@@ -202,9 +211,9 @@ cd web && npm run dev
 
 | ワークフロー | トリガー | 内容 |
 |---|---|---|
-| `test.yml` | PR / main | 問題の形式チェック、infra / web / agent のテスト |
+| `test.yml` | PR / main | 問題データがこのリポジトリに無いことの確認、問題の形式チェック、infra / web / agent のテスト |
 | `cdkd-diff.yml` | PR（infra・agent） | `cdkd diff` を PR にコメント |
-| `deploy.yml` | main | cdkd deploy → 問題データ同期 → フロント同期 → キャッシュ削除 |
+| `deploy.yml` | main / content リポジトリの main | cdkd deploy → 問題データ同期 → フロント同期 → キャッシュ削除 |
 
 AWS へは GitHub OIDC で入る。deploy ロールは main ブランチからだけ、diff ロールは PR からだけ引き受けられる。
 cdkd は deploy ロールから `sakekasu-learning-cdkd-deploy`（管理者権限。CDK の cfn-exec ロールに当たる）に切り替えてデプロイする。

@@ -1,6 +1,6 @@
 # 選択肢ごとの図解の作り方
 
-解説カードの中で、解説文の上に表示する図の決まりごと。見本は `aws/dop-c02/diagrams/DOP-2003/`（設計は `aws/dop-c02/diagrams/src/DOP-2003_選択肢*.json`）。
+解説カードの中で、解説文の上に表示する図の決まりごと。見本は問題データのリポジトリ（[question-data.md](question-data.md)）の `aws/dop-c02/diagrams/DOP-2003/`（設計は `aws/dop-c02/diagrams/src/DOP-2003_選択肢*.json`）。
 
 ## 何を描くか
 

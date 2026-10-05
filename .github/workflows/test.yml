@@ -1,4 +1,5 @@
 # PR と main への push で、問題データの形式・インフラ・フロント・エージェントを検証する。
+# 問題データは非公開リポジトリ sakekasu-learning-content から取得する（docs/question-data.md）。
 # AWS の認証情報は使わない。
 name: test
 
@@ -11,6 +12,13 @@ permissions:
   contents: read
 
 jobs:
+  # 問題データ（問題文・選択肢・解説・図解）がこのリポジトリに入っていないこと（docs/question-data.md）
+  no-question-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash infra/scripts/questions/check-not-in-repo.sh
+
   infra:
     runs-on: ubuntu-latest
     defaults:
@@ -18,6 +26,22 @@ jobs:
         working-directory: infra
     steps:
       - uses: actions/checkout@v7
+      # 問題データの非公開リポジトリを読む deploy key は、フォークからの PR には渡らない。
+      # そのときは問題データの形式チェックを飛ばす（パーサーのテストはダミーの問題で動く）。
+      # 鍵そのものは後続のステップ（npm ci やテスト）の環境変数に置かない
+      - name: 問題データを読めるか
+        id: questions
+        env:
+          QUESTIONS_DEPLOY_KEY: ${{ secrets.QUESTIONS_DEPLOY_KEY }}
+        run: echo "available=${{ env.QUESTIONS_DEPLOY_KEY != '' }}" >> "$GITHUB_OUTPUT"
+      - name: 問題データの取得
+        if: steps.questions.outputs.available == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: yuuuuuuu168/sakekasu-learning-content
+          ssh-key: ${{ secrets.QUESTIONS_DEPLOY_KEY }}
+          path: content
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -30,6 +54,7 @@ jobs:
       - run: npm ci --ignore-scripts
       # 問題メモの形式チェック（崩れた問題があればここで落ちる）
       - run: npm run check:questions
+        if: steps.questions.outputs.available == 'true'
       - run: npm run typecheck
       # synth のテストはエージェントのパッケージを必要とする
       - run: npm run package:agent

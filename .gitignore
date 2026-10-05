@@ -11,6 +11,10 @@ agent/dist/
 __pycache__/
 .pytest_cache/
 
+# 問題データ（問題文・選択肢・解説・図解）は非公開リポジトリ sakekasu-learning-content に置く。
+# 手元ではそれを content/ に clone して使う。このリポジトリには入れない（docs/question-data.md）
+/content/
+
 # local settings / secrets
 .env
 .env.*

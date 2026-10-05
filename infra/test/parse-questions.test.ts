@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { QuestionFormatError, parseQuestions } from '../scripts/questions/parse';
-import { buildQuestions } from '../scripts/questions/build';
+import { CONTENT_DIR, buildQuestions } from '../scripts/questions/build';
 
 const sample = `# Q-2
 ## 問題
@@ -71,7 +71,8 @@ describe('parseQuestions', () => {
   });
 });
 
-describe('buildQuestions（実データ）', () => {
+// 問題データは非公開リポジトリにあり、clone していない環境（フォークからの PR など）では飛ばす
+describe.skipIf(!existsSync(CONTENT_DIR))('buildQuestions（実データ）', () => {
   it('content/ 配下のすべての問題が形式チェックを通る', () => {
     const { catalog, exams } = buildQuestions();
     expect(catalog.categories.length).toBeGreaterThan(0);

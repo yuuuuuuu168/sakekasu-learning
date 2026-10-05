@@ -1,6 +1,9 @@
 /**
  * content/ 配下の問題メモを JSON に変換して build/questions/ に出力する。
  *
+ * content/ は非公開リポジトリ sakekasu-learning-content の clone で、このリポジトリには入っていない
+ * （docs/question-data.md）。環境変数 QUESTIONS_CONTENT_DIR で別の場所を指せる。
+ *
  *   content/<category>/category.json      分野のメタ情報（AWS, OCI, Terraform ...）
  *   content/<category>/<exam>/exam.json   資格のメタ情報
  *   content/<category>/<exam>/*.md        問題メモ（複数ファイル可）
@@ -23,7 +26,7 @@ import type { Catalog, CategorySummary, ExamFile } from '../../../shared/types';
 import { parseQuestions } from './parse';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const CONTENT_DIR = join(ROOT, 'content');
+export const CONTENT_DIR = resolve(ROOT, process.env.QUESTIONS_CONTENT_DIR ?? 'content');
 const OUT_DIR = join(ROOT, 'build/questions');
 
 /** URL とS3 キーに使うため、ディレクトリ名は英小文字・数字・ハイフンに限る */
@@ -140,7 +143,12 @@ export function buildQuestions(contentDir = CONTENT_DIR) {
 
 function main() {
   const checkOnly = process.argv.includes('--check');
+  // 問題データが無いまま出力すると、デプロイの同期（--delete）で非公開バケットの問題が消える。ここで止める
+  if (!existsSync(CONTENT_DIR)) {
+    throw new Error(`${CONTENT_DIR} がありません。問題データのリポジトリを clone してください（docs/question-data.md）`);
+  }
   const { catalog, exams, diagrams } = buildQuestions();
+  if (exams.length === 0) throw new Error(`${CONTENT_DIR} に資格が1つもありません`);
 
   for (const c of catalog.categories) {
     for (const e of c.exams) console.log(`${c.category}/${e.exam}: ${e.questionCount} 問`);
