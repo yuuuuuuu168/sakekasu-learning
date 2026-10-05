@@ -1,5 +1,11 @@
 # PR で cdkd diff を実行し、結果を PR にコメントする（既存のコメントがあれば更新する）。
 # CloudFormation から未移行のスタックは、その旨だけを出す（取り込みは main へのマージ時）。
+#
+# 3 つのジョブに分けて、OIDC トークンと PR への書き込み権限を、それが要るジョブにだけ渡す。
+#   synth   : 依存の取得・エージェントの梱包・cdk synth。権限なし（OIDC トークンを取れない）
+#   diff    : 合成済みの cdk.out と cdkd の状態を比べる。OIDC で diff ロールを引き受ける
+#   comment : 結果を PR にコメントする。PR への書き込みだけ
+# 依存のコード（テスト・ビルド・CDK アプリ）は synth でしか動かない。diff で動く依存は cdkd だけ。
 name: cdkd-diff
 
 on:
@@ -9,52 +15,106 @@ on:
       - 'agent/**'
       - '.github/workflows/cdkd-diff.yml'
 
-permissions:
-  id-token: write
-  contents: read
-  pull-requests: write
+# ジョブごとに付ける。既定では何も許さない
+permissions: {}
 
 jobs:
-  diff:
-    # PR のコードを AWS の認証情報を持った状態で実行するので、このリポジトリのブランチからの PR に限る
+  synth:
+    # PR のコードで AWS の認証情報を使うので、このリポジトリのブランチからの PR に限る
     # （フォークからの PR では動かさない）
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: infra
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: infra/package-lock.json
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: agent/uv.lock
-      # 依存の取得は AWS の認証情報を入れる前に済ませる
-      # （乗っ取られた依存のインストール時スクリプトに一時認証情報を読ませない）
       - run: npm ci --ignore-scripts
       - run: npm run package:agent
-      - uses: aws-actions/configure-aws-credentials@v6
+      - run: npx cdk synth --all --quiet --output cdk.out
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cdk-out
+          path: infra/cdk.out
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  diff:
+    needs: synth
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: infra
+    outputs:
+      exit: ${{ steps.diff.outputs.exit }}
+    steps:
+      # cdk.json（cdkd の設定）と scripts/cdkd-stacks.sh を使う
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      # 認証の前に済ませる。ここで入る依存のうち、このジョブで動くのは cdkd だけ
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: cdk-out
+          path: infra/cdk.out
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: arn:aws:iam::232791540685:role/sakekasu-learning-github-actions-diff
           aws-region: ap-northeast-1
       - id: diff
+        env:
+          CDKD_APP: cdk.out
         run: |
           set +e
           bash scripts/cdkd-stacks.sh preview > raw.txt 2>&1
           echo "exit=$?" >> "$GITHUB_OUTPUT"
           # cdkd は NO_COLOR でも色のエスケープシーケンスを出すので、コメントに載せる前に落とす
           sed -E 's/\x1b\[[0-9;]*m//g' raw.txt > diff.txt
-      - uses: actions/github-script@v9
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cdkd-diff
+          path: infra/diff.txt
+          if-no-files-found: error
+          retention-days: 1
+
+  comment:
+    needs: diff
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: cdkd-diff
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require('fs');
             const marker = '<!-- cdk-diff -->';
-            let diff = fs.readFileSync('infra/diff.txt', 'utf8');
+            let diff = fs.readFileSync('diff.txt', 'utf8');
             if (diff.length > 60000) diff = diff.slice(0, 60000) + '\n... (truncated)';
             // 出力中のバッククォートでコードブロックが閉じないよう、最長の連続より長いフェンスで囲む
             const longest = Math.max(0, ...(diff.match(/`+/g) ?? []).map((run) => run.length));
@@ -69,7 +129,7 @@ jobs:
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number, body });
             }
-      - if: steps.diff.outputs.exit != '0'
+      - if: needs.diff.outputs.exit != '0'
         run: |
           echo "cdkd diff が失敗しました"
           exit 1

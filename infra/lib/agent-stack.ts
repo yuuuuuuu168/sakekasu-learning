@@ -1,9 +1,10 @@
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CfnOutput, Duration, Stack, type StackProps } from 'aws-cdk-lib';
+import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from 'aws-cdk-lib';
 import * as agentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import type * as s3 from 'aws-cdk-lib/aws-s3';
 import { Asset } from 'aws-cdk-lib/aws-s3-assets';
@@ -24,6 +25,12 @@ export const AGENT_PACKAGE_DIR = path.resolve(here, '../../agent/dist/package');
  */
 export const DEFAULT_MODEL_ID = 'global.moonshotai.kimi-k3';
 export const DEFAULT_FALLBACK_MODEL_ID = '';
+
+/** 1 人あたり 1 日（日本時間）に相談できる回数。agent/src/quota.py が数える */
+export const CHAT_DAILY_LIMIT = 50;
+
+/** サイト全体の相談回数がこの回数 / 1 時間に達したら通知する */
+export const CHAT_INVOCATIONS_ALARM_PER_HOUR = 60;
 
 /** AWS 公式ドキュメントを検索・参照できるリモート MCP サーバー（認証不要） */
 export const AWS_KNOWLEDGE_MCP_URL = 'https://knowledge-mcp.global.api.aws';
@@ -144,6 +151,20 @@ export class AgentStack extends Stack {
     );
     questionsBucket.grantRead(role);
 
+    // 相談回数の上限（ユーザーごと・1 日ごと）。Runtime はブラウザから直接呼ばれ、API のスロットリングが
+    // 効かないため、アカウントの乗っ取りや連続呼び出しで Bedrock の費用がかさまないよう、モデルを呼ぶ前に数える。
+    // キーは sub の SHA-256 と日付。古い日の記録は TTL で消える
+    const quotaTable = new dynamodb.TableV2(this, 'ChatQuotaTable', {
+      tableName: `${envName}-sakekasu-learning-chat-quota`,
+      partitionKey: { name: 'userKey', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'day', type: dynamodb.AttributeType.STRING },
+      billing: dynamodb.Billing.onDemand(),
+      timeToLiveAttribute: 'expiresAt',
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+    // 条件付きの加算だけを行う。読み取りや削除の権限は渡さない
+    quotaTable.grant(role, 'dynamodb:UpdateItem');
+
     // 共通ユーザープールが learning のクライアントに発行したトークンだけを通す。
     const discoveryUrl =
       `https://cognito-idp.${sharedAuthRegion(sharedAuth)}.amazonaws.com/${sharedAuth.userPoolId}` +
@@ -180,6 +201,8 @@ export class AgentStack extends Stack {
         COGNITO_USER_POOL_ID: sharedAuth.userPoolId,
         COGNITO_CLIENT_ID: sharedAuth.clientId,
         AWS_KNOWLEDGE_MCP_URL,
+        CHAT_QUOTA_TABLE_NAME: quotaTable.tableName,
+        CHAT_DAILY_LIMIT: String(CHAT_DAILY_LIMIT),
       },
     });
     runtime.node.addDependency(role);
@@ -234,7 +257,26 @@ export class AgentStack extends Stack {
       });
     }
 
+    // 相談が急に増えたとき（1 人の上限を短時間で使い切る動き、利用者の急増）に気づくため。
+    // 上限で断った相談も Runtime の呼び出しとして数える（費用はほぼかからないが、異常な呼び出しの兆候になる）
+    alarms.add('AgentInvocationsHigh', {
+      name: 'agent-invocations-high',
+      description:
+        `AI チャットへの相談が 1 時間に ${CHAT_INVOCATIONS_ALARM_PER_HOUR} 回を超えています。` +
+        `Bedrock の費用が増えます。まず ${runtimeLogs} で、同じ利用者から連続して呼ばれていないか` +
+        `（「1 日の上限に達したため断りました」が続いていないか）を見る`,
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/Bedrock-AgentCore',
+        metricName: 'Invocations',
+        dimensionsMap: { ResourceId: runtime.attrAgentRuntimeArn },
+        statistic: 'Sum',
+        period: Duration.hours(1),
+      }),
+      threshold: CHAT_INVOCATIONS_ALARM_PER_HOUR,
+    });
+
     this.runtimeArn = runtime.attrAgentRuntimeArn;
     new CfnOutput(this, 'RuntimeArn', { value: runtime.attrAgentRuntimeArn });
+    new CfnOutput(this, 'ChatQuotaTableName', { value: quotaTable.tableName });
   }
 }

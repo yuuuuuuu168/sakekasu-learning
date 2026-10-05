@@ -121,6 +121,32 @@ describe('stacks', () => {
     });
   });
 
+  it('相談回数の上限: 専用テーブル（TTL つき・消えない）に、Runtime は条件付きの加算だけできる', () => {
+    t.agent.hasResource('AWS::DynamoDB::GlobalTable', {
+      DeletionPolicy: 'Retain',
+      Properties: Match.objectLike({
+        TableName: 'test-sakekasu-learning-chat-quota',
+        KeySchema: [
+          { AttributeName: 'userKey', KeyType: 'HASH' },
+          { AttributeName: 'day', KeyType: 'RANGE' },
+        ],
+        TimeToLiveSpecification: { AttributeName: 'expiresAt', Enabled: true },
+      }),
+    });
+    t.agent.hasResourceProperties('AWS::BedrockAgentCore::Runtime', {
+      EnvironmentVariables: Match.objectLike({
+        CHAT_QUOTA_TABLE_NAME: Match.anyValue(),
+        CHAT_DAILY_LIMIT: '50',
+      }),
+    });
+    const dynamoActions = Object.values(t.agent.findResources('AWS::IAM::Policy')).flatMap((policy) =>
+      (policy.Properties.PolicyDocument.Statement as { Action: string | string[] }[]).flatMap((st) =>
+        [st.Action].flat().filter((a) => a.startsWith('dynamodb:')),
+      ),
+    );
+    expect(dynamoActions).toEqual(['dynamodb:UpdateItem']);
+  });
+
   it('サイトのバケットは CloudFront の OAC 経由でだけ読める', () => {
     t.web.hasResourceProperties('AWS::S3::Bucket', {
       PublicAccessBlockConfiguration: {
@@ -239,6 +265,18 @@ describe('stacks', () => {
         expect(JSON.stringify(alarm.Dimensions)).toContain('"Name":"ResourceId"');
         expect(JSON.stringify(alarm.Dimensions)).toContain('AgentRuntimeArn');
       }
+    });
+
+    it('AI チャットへの相談が 1 時間に 60 回を超えたら知らせる', () => {
+      expect(alarmNamed(t.agent, 'test-sakekasu-learning-agent-invocations-high')).toMatchObject({
+        Namespace: 'AWS/Bedrock-AgentCore',
+        MetricName: 'Invocations',
+        Statistic: 'Sum',
+        Period: 3600,
+        Threshold: 60,
+        ComparisonOperator: 'GreaterThanOrEqualToThreshold',
+        TreatMissingData: 'notBreaching',
+      });
     });
   });
 });

@@ -24,6 +24,7 @@ from strands.tools.mcp import MCPClient
 
 from auth import verify_access_token
 from question_context import QuestionContext, render_question, resolve_question
+from quota import QuotaResult, consume as consume_quota, daily_limit
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("tutor")
@@ -138,6 +139,17 @@ async def invoke(payload: Any, context: Any):
     ctx = await asyncio.to_thread(resolve_question, payload)
     if isinstance(ctx, str):
         yield ctx
+        return
+
+    # モデルを呼ぶ直前に数える。入力の誤りや存在しない問題では回数を減らさない
+    quota = await asyncio.to_thread(consume_quota, user)
+    if quota is QuotaResult.EXCEEDED:
+        log.info("1 日の上限に達したため断りました")
+        yield f"今日の相談回数の上限（{daily_limit()}回）に達しました。明日（日本時間の 0 時以降）にまたお試しください。"
+        return
+    if quota is QuotaResult.UNAVAILABLE:
+        # 数えられないときは、上限を守れないので呼ばない（費用の上限を優先する）
+        yield "ただいま相談を受け付けられません。時間をおいてもう一度お試しください。"
         return
 
     log.info("相談を受け付けました question=%s answered=%s", ctx.question_id, bool(ctx.selected))

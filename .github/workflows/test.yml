@@ -47,7 +47,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: infra/package-lock.json
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: agent/uv.lock
@@ -83,7 +83,7 @@ jobs:
         working-directory: agent
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: agent/uv.lock

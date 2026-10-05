@@ -5,6 +5,7 @@
 - 招待制のログイン（4 アプリ共通のログイン `auth.sakekasu-builder.com`。Cognito のマネージドログイン）。MFA 必須（認証アプリの TOTP）。回答履歴をユーザーごとに記録し、直近2回の正誤で習熟度を判定する
 - 問題文はそのまま、選択肢は毎回シャッフルして出題する。解説は回答後に折りたたみで表示する
 - 問題ごとに AI（Claude Sonnet）に相談できる。AWS 公式ドキュメントを MCP で参照しながら答える
+- AI への相談は 1 人あたり 1 日 50 回まで（日本時間の 0 時に戻る）。Bedrock の費用がかさまないよう、モデルを呼ぶ前に DynamoDB で数える（`agent/src/quota.py`）
 
 ## 習熟度の判定
 
@@ -216,5 +217,8 @@ cd web && npm run dev
 | `deploy.yml` | main / content リポジトリの main | cdkd deploy → 問題データ同期 → フロント同期 → キャッシュ削除 |
 
 AWS へは GitHub OIDC で入る。deploy ロールは main ブランチからだけ、diff ロールは PR からだけ引き受けられる。
+OIDC トークンを取れるのは、AWS を操作するジョブだけにしている。テスト・ビルド・`cdk synth` は権限の無い別のジョブで済ませ、
+成果物（合成済みの `cdk.out` など）を artifact で渡す。AWS を操作するジョブで動く依存は cdkd（と config.json を作る tsx）だけになる。
+サードパーティのアクションはコミット SHA で固定している。
 cdkd は deploy ロールから `sakekasu-learning-cdkd-deploy`（管理者権限。CDK の cfn-exec ロールに当たる）に切り替えてデプロイする。
 diff ロールが読めるのは、このアプリの cdkd の状態（S3）だけ。AWS のリソースやデータは読めない。
