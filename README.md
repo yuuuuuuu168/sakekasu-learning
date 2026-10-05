@@ -216,5 +216,8 @@ cd web && npm run dev
 | `deploy.yml` | main / content リポジトリの main | cdkd deploy → 問題データ同期 → フロント同期 → キャッシュ削除 |
 
 AWS へは GitHub OIDC で入る。deploy ロールは main ブランチからだけ、diff ロールは PR からだけ引き受けられる。
+OIDC トークンを取れるのは、AWS を操作するジョブだけにしている。テスト・ビルド・`cdk synth` は権限の無い別のジョブで済ませ、
+成果物（合成済みの `cdk.out` など）を artifact で渡す。AWS を操作するジョブで動く依存は cdkd（と config.json を作る tsx）だけになる。
+サードパーティのアクションはコミット SHA で固定している。
 cdkd は deploy ロールから `sakekasu-learning-cdkd-deploy`（管理者権限。CDK の cfn-exec ロールに当たる）に切り替えてデプロイする。
 diff ロールが読めるのは、このアプリの cdkd の状態（S3）だけ。AWS のリソースやデータは読めない。

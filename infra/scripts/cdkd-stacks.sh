@@ -109,5 +109,6 @@ done
 
 if [[ "$mode" == preview && ${#migrated[@]} -gt 0 ]]; then
   echo "== cdkd diff"
-  npx cdkd diff "${migrated[@]}"
+  # CDKD_APP に合成済みのクラウドアセンブリ（cdk.out）を渡すと、アプリのコードを動かさずに比べる（cdkd-diff.yml）
+  npx cdkd diff ${CDKD_APP:+--app "$CDKD_APP"} "${migrated[@]}"
 fi

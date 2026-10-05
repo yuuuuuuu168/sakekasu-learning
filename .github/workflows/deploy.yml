@@ -1,10 +1,19 @@
 # main への push で、インフラ・問題データ・フロントエンドをまとめてデプロイする。
 #
-# 1. テストとビルド（AWS の認証情報を入れる前に済ませる）。問題データは非公開リポジトリから取得する
-# 2. cdkd deploy --all（API / AgentCore / CloudFront）。CloudFormation を通さず API を直接呼ぶ
-# 3. 問題データを非公開バケットへ同期
-# 4. スタックの出力と cdk.json の sharedAuth（共通ログイン）から config.json を作り、フロントエンドをサイトのバケットへ同期
-# 5. CloudFront のキャッシュを削除
+# build ジョブ（OIDC トークンを取れない）
+#   1. テストとビルド。問題データは非公開リポジトリから取得する
+#   2. cdk synth で CloudFormation テンプレートとアセットを作る（AWS の認証情報は要らない）
+#   3. 成果物（cdk.out、問題データの JSON、フロントエンド）を artifact に置く
+# deploy ジョブ（OIDC で AWS に入る）
+#   4. cdkd deploy --all --app cdk.out（API / AgentCore / CloudFront）。合成済みのものを使い、アプリのコードは動かさない
+#   5. 問題データを非公開バケットへ同期
+#   6. スタックの出力と cdk.json の sharedAuth（共通ログイン）から config.json を作り、フロントエンドをサイトのバケットへ同期
+#   7. CloudFront のキャッシュを削除
+#
+# ジョブを分けるのは、テストやビルドで動く依存のコードに OIDC トークンを取らせないため。
+# id-token: write のジョブでは全ステップに ACTIONS_ID_TOKEN_REQUEST_* が入り、乗っ取られた依存が
+# 自分でトークンを取って deploy ロールを引き受けられる（--ignore-scripts はインストール時しか止めない）。
+# deploy ジョブで動く依存は cdkd と、config.json を作る tsx のスクリプトだけにしている。
 name: deploy
 
 on:
@@ -15,9 +24,8 @@ on:
   repository_dispatch:
     types: [questions-updated]
 
-permissions:
-  id-token: write
-  contents: read
+# ジョブごとに付ける。既定では何も許さない
+permissions: {}
 
 # 同時デプロイを防ぐ。後続を打ち切らないのは、最後の main の状態を必ず反映させるため
 concurrency:
@@ -31,10 +39,14 @@ env:
   CDKD_ROLE_ARN: arn:aws:iam::232791540685:role/sakekasu-learning-cdkd-deploy
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       # 問題データは非公開リポジトリにある（docs/question-data.md）。読み取り専用の deploy key で取得する
       - name: 問題データの取得
         uses: actions/checkout@v7
@@ -50,12 +62,11 @@ jobs:
           cache-dependency-path: |
             infra/package-lock.json
             web/package-lock.json
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: agent/uv.lock
 
-      # ---- 認証前: 依存の取得・テスト・ビルド ----
       - name: 依存の取得
         run: |
           npm ci --ignore-scripts --prefix infra
@@ -73,9 +84,47 @@ jobs:
       - name: フロントエンドのテストとビルド
         working-directory: web
         run: npm test && npm run build
+      - name: CDK の合成
+        working-directory: infra
+        run: npx cdk synth --all --quiet --output cdk.out
 
-      # ---- 認証後: デプロイ ----
-      - uses: aws-actions/configure-aws-credentials@v6
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: deploy-bundle
+          # パスの共通部分（リポジトリのルート）からの相対で置かれる
+          path: |
+            infra/cdk.out
+            build/questions
+            web/dist
+          # アセットのディレクトリに . で始まるファイルがあっても落とさない
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      # cdk.json（cdkd の設定と sharedAuth）と scripts/write-web-config.ts を使う
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      # 認証の前に済ませる。ここで入る依存のうち、このジョブで動くのは cdkd と tsx だけ
+      - name: 依存の取得
+        run: npm ci --ignore-scripts --prefix infra
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: deploy-bundle
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: arn:aws:iam::232791540685:role/sakekasu-learning-github-actions-deploy
           aws-region: ap-northeast-1
@@ -86,7 +135,7 @@ jobs:
           # cdkd はスタックが失敗しても終了コード 0 で抜けることがある（2026-10-04 の builder で、
           # 自動ロールバックまで走ったのにステップは緑だった）。出力にも失敗が出ていないか確かめる
           set -o pipefail
-          npx cdkd deploy --all --yes 2>&1 | tee "$RUNNER_TEMP/cdkd-deploy.log"
+          npx cdkd deploy --all --yes --app cdk.out 2>&1 | tee "$RUNNER_TEMP/cdkd-deploy.log"
           if grep -qE 'Failed: |node\(s\) failed|Rollback completed' "$RUNNER_TEMP/cdkd-deploy.log"; then
             echo "::error::cdkd の出力に失敗が出ている（終了コードは 0）。上のログを確かめる"
             exit 1
