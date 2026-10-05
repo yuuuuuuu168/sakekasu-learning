@@ -32,6 +32,7 @@ def _run(monkeypatch, agents):
     monkeypatch.setattr(main, "FALLBACK_MODEL_ID", "fallback")
     monkeypatch.setattr(main, "_build_agent", build)
     monkeypatch.setattr(main, "verify_access_token", lambda _: "user")
+    monkeypatch.setattr(main, "consume_quota", lambda _: main.QuotaResult.OK)
     monkeypatch.setattr(main, "resolve_question", lambda _: SimpleNamespace(question_id="Q", selected=[]))
     ctx = SimpleNamespace(request_headers={"Authorization": "Bearer x"})
 

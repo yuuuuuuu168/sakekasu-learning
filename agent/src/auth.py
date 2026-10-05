@@ -5,7 +5,8 @@ Runtime の JWT オーソライザーでも検証済みだが、アプリ側で�
 
 トークンは共通ログイン（共通ユーザープール）が learning のクライアントに発行したもの。
 プール ID とクライアント ID は環境変数で受け取る（infra/lib/agent-stack.ts が cdk.json の
-context `sharedAuth` から入れる）。sub は認証の確認にだけ使い、どこにも保存しない。
+context `sharedAuth` から入れる）。sub は認証の確認と、利用回数の上限（quota.py）にだけ使う。
+上限の記録には sub の SHA-256 を使い、sub そのものは保存しない。
 """
 
 from __future__ import annotations

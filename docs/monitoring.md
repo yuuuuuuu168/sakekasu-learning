@@ -22,7 +22,7 @@
 
 ## アラーム一覧
 
-名前は `dev` 環境のもの（`${env}-sakekasu-learning-…`）。どれも 5 分間の合計で、1 期間で判定する。
+名前は `dev` 環境のもの（`${env}-sakekasu-learning-…`）。`agent-invocations-high` 以外は 5 分間の合計で、1 期間で判定する。
 treatMissingData はすべて `NOT_BREACHING`（起きたときだけ値が出る指標なので、利用が無い時間に鳴らさない）。
 
 | アラーム名 | スタック | 指標 | 条件 |
@@ -35,6 +35,7 @@ treatMissingData はすべて `NOT_BREACHING`（起きたときだけ値が出�
 | `dev-sakekasu-learning-agent-throttles` | agent | `AWS/Bedrock-AgentCore` Throttles | 1 回以上 |
 | `dev-sakekasu-learning-agent-auth-unauthorized` | agent | `AWS/Bedrock-AgentCore` InboundAuthorizationFailure（UnauthorizedInboundTokenException） | 3 回以上 |
 | `dev-sakekasu-learning-agent-auth-invalid-token` | agent | `AWS/Bedrock-AgentCore` InboundAuthorizationFailure（InvalidInboundTokenException） | 3 回以上 |
+| `dev-sakekasu-learning-agent-invocations-high` | agent | `AWS/Bedrock-AgentCore` Invocations（1 時間の合計） | 60 回以上 |
 
 補足:
 
@@ -42,6 +43,9 @@ treatMissingData はすべて `NOT_BREACHING`（起きたときだけ値が出�
   起動時の失敗だけで、ふつうの失敗は HTTP API の 5xx に出る。5xx は一時的な 1 回で鳴らさないよう 3 回から
 - DynamoDB の ThrottledRequests は Operation のディメンションつきでしか出ないため、テーブル単位で出る
   Read/WriteThrottleEvents を足して見る
+- `agent-invocations-high` は費用の見張り。Runtime はブラウザから直接呼ばれ、API のスロットリングが効かない。
+  1 人あたりの上限（1 日 50 回。agent/src/quota.py）で断った相談も呼び出しとして数えるので、
+  1 人が上限を短時間で使い切る動きや、利用者の急増に気づける
 - AgentCore の指標のディメンションは ResourceId（Runtime の ARN）。認可失敗はさらに ExceptionType で分かれる。
   共通ログインへ移った直後なので、allowedClients の取り違えなどで全員がはじかれる事故を拾うために入れている。
   トークン切れの単発で鳴らないよう、5 分に 3 回から（sakekasu-builder のソムリエと同じ）
