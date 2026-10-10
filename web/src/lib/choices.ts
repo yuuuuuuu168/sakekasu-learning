@@ -17,12 +17,12 @@ export function labelOf(displayOrder: readonly number[], original: number): stri
 }
 
 /**
- * 解説本文の「選択肢 3」「選択肢 1 と 4」を画面のラベルに置き換える。
+ * 解説本文の「選択肢 3」「選択肢 1 と 4」（英語の解説では「Option 3」「options 1 and 4」）を画面のラベルに置き換える。
  * 解説は原本の番号で書かれているため、選択肢をシャッフルするとそのままでは食い違う。
  */
 export function relabel(text: string, displayOrder: readonly number[]): string {
   return text.replace(
-    /選択肢\s*\d+(?:\s*(?:と|、|,|および|及び|や|・)\s*\d+)*/g,
+    /(?:選択肢|[Oo]ptions?)\s*\d+(?:\s*(?:と|、|,\s*and|,\s*or|,|および|及び|や|・|and|or)\s*\d+)*/g,
     (ref) =>
       ref.replace(/\d+/g, (num) => {
         const n = Number(num);

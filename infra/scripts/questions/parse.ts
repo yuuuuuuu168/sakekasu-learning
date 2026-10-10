@@ -22,6 +22,9 @@ const EXPLANATION_HEADING = /^### 【(正解|不正解)】選択肢\s*(\d+)\s*�
 const CHOICE_LINE = /^(\d+)\.\s+(.*)$/;
 /** 問題文の「（2 つ選択）」表記。全角・半角の括弧と数字の揺れを許す */
 const SELECT_COUNT = /[（(]\s*([0-9０-９]+)\s*つ選択\s*[）)]/;
+/** 英語の問題文の「(Choose two.)」「(Select 2)」表記 */
+const SELECT_COUNT_EN = /\(\s*(?:choose|select)\s+([0-9]+|two|three|four|five|six)\b[^)]*\)/i;
+const NUMBER_WORDS: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, six: 6 };
 /** 問題番号は URL のパスと DynamoDB のキーに載るため、使える文字を絞る */
 export const QUESTION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
@@ -121,6 +124,15 @@ function toHalfWidthNumber(s: string): number {
   return Number(s.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)));
 }
 
+/** 問題文に書かれた選択数。表記が無ければ undefined */
+function declaredSelectCount(question: string): { count: number; text: string } | undefined {
+  const ja = SELECT_COUNT.exec(question);
+  if (ja) return { count: toHalfWidthNumber(ja[1]), text: ja[0] };
+  const en = SELECT_COUNT_EN.exec(question);
+  if (en) return { count: NUMBER_WORDS[en[1].toLowerCase()] ?? Number(en[1]), text: en[0] };
+  return undefined;
+}
+
 export function parseQuestions(markdown: string, source = 'markdown'): QuestionRecord[] {
   const raws = splitQuestions(markdown);
   const seen = new Set<string>();
@@ -150,15 +162,15 @@ export function parseQuestions(markdown: string, source = 'markdown'): QuestionR
       const { answers, explanations } = parseExplanations(raw.id, explanationLines, choices.length);
       if (answers.length === 0) throw new QuestionFormatError('正解の選択肢がありません');
 
-      const declared = SELECT_COUNT.exec(question);
-      if (declared && toHalfWidthNumber(declared[1]) !== answers.length) {
+      const declared = declaredSelectCount(question);
+      if (declared && declared.count !== answers.length) {
         throw new QuestionFormatError(
-          `問題文は「${declared[1]} つ選択」ですが、正解の解説は ${answers.length} 件です`,
+          `問題文は「${declared.text}」ですが、正解の解説は ${answers.length} 件です`,
         );
       }
       if (!declared && answers.length > 1) {
         throw new QuestionFormatError(
-          `正解が ${answers.length} 件ありますが、問題文に「（${answers.length} つ選択）」の表記がありません`,
+          `正解が ${answers.length} 件ありますが、問題文に「（${answers.length} つ選択）」または「(Choose N.)」の表記がありません`,
         );
       }
 
