@@ -189,6 +189,15 @@ async function getDiagram(event: Event, userId: string): Promise<DiagramResponse
 }
 
 export async function handler(event: Event): Promise<APIGatewayProxyResultV2> {
+  const started = Date.now();
+  const res = await route(event);
+  // どの API が遅いかをログで追えるように、経路ごとの処理時間を残す
+  const status = typeof res === 'object' ? res.statusCode : undefined;
+  console.log(JSON.stringify({ route: event.routeKey, status, ms: Date.now() - started }));
+  return res;
+}
+
+async function route(event: Event): Promise<APIGatewayProxyResultV2> {
   const userId = event.requestContext.authorizer?.jwt?.claims?.sub;
   if (typeof userId !== 'string' || !userId) return json(401, { message: 'unauthorized' });
 

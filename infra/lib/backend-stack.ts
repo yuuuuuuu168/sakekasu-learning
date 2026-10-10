@@ -73,7 +73,9 @@ export class BackendStack extends Stack {
       handler: 'handler',
       runtime: lambda.Runtime.NODEJS_22_X,
       architecture: lambda.Architecture.ARM_64,
-      memorySize: 512,
+      // CPU はメモリに比例して割り当てられる。512MB だとコールドスタートと問題 JSON（数 MB）の
+      // 解析に 1 秒前後かかっていたため、1 vCPU 分を割り当てる（利用は少ないので費用はほぼ増えない）
+      memorySize: 1769,
       timeout: Duration.seconds(10),
       logGroup,
       environment: {
