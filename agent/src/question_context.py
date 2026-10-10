@@ -68,7 +68,7 @@ class QuestionContext:
         return LABELS[self.display_order.index(original_index)]
 
     def relabel(self, text: str) -> str:
-        """解説中の「選択肢 3」「選択肢 1 と 3」を画面の表示ラベルに置き換える。"""
+        """解説中の「選択肢 3」「選択肢 1 と 3」（英語の解説では「Option 3」「options 1 and 3」）を画面の表示ラベルに置き換える。"""
 
         def replace_number(m: re.Match[str]) -> str:
             n = int(m.group(0))
@@ -77,7 +77,11 @@ class QuestionContext:
         def replace_ref(m: re.Match[str]) -> str:
             return re.sub(r"\d+", replace_number, m.group(0))
 
-        return re.sub(r"選択肢\s*\d+(?:\s*(?:と|、|,|および|や|・|及び)\s*\d+)*", replace_ref, text)
+        return re.sub(
+            r"(?:選択肢|[Oo]ptions?)\s*\d+(?:\s*(?:と|、|,\s*and|,\s*or|,|および|及び|や|・|and|or)\s*\d+)*",
+            replace_ref,
+            text,
+        )
 
 
 def resolve_question(payload: dict[str, Any]) -> QuestionContext | str:

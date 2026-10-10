@@ -36,6 +36,10 @@ def test_relabel_uses_display_order():
     assert ctx.relabel("選択肢 1 と 4 の組み合わせ") == "選択肢 C と A の組み合わせ"
     assert ctx.relabel("選択肢3は誤り") == "選択肢Dは誤り"
     assert ctx.relabel("選択肢 9") == "選択肢 9"
+    # 英語の解説
+    assert ctx.relabel("Option 4 covers it") == "Option A covers it"
+    assert ctx.relabel("options 1 and 3 only") == "options C and D only"
+    assert ctx.relabel("2 options for 3 regions") == "2 options for 3 regions"
 
 
 def test_render_hides_nothing_but_marks_unanswered():

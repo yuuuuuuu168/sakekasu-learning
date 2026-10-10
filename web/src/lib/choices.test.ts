@@ -24,6 +24,13 @@ describe('relabel', () => {
     expect(relabel('選択肢1、2', order)).toBe('選択肢C、B');
   });
 
+  it('英語の「Option 3」「options 1 and 3」も置き換える', () => {
+    expect(relabel('Option 4 covers it', order)).toBe('Option A covers it');
+    expect(relabel('options 1 and 3 only', order)).toBe('options C and D only');
+    expect(relabel('options 1, 2, and 4', order)).toBe('options C, B, and A');
+    expect(relabel('2 options for 3 regions', order)).toBe('2 options for 3 regions');
+  });
+
   it('選択肢以外の数字や範囲外の番号は変えない', () => {
     expect(relabel('2 つ選択。選択肢 9 は無い', order)).toBe('2 つ選択。選択肢 9 は無い');
   });

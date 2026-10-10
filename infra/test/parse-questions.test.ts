@@ -66,6 +66,12 @@ describe('parseQuestions', () => {
     expect(() => parseQuestions(broken)).toThrow(/つ選択/);
   });
 
+  it('英語の「(Choose two.)」表記も選択数として扱う', () => {
+    const en = sample.replace('（2 つ選択）', '(Choose two.)');
+    expect(parseQuestions(en)[0].answers).toEqual([0, 2]);
+    expect(() => parseQuestions(sample.replace('（2 つ選択）', '(Select 3)'))).toThrow(QuestionFormatError);
+  });
+
   it('問題番号の重複を検出する', () => {
     expect(() => parseQuestions(sample + '\n' + sample)).toThrow(/重複/);
   });
