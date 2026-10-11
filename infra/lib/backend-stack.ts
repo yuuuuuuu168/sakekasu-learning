@@ -62,13 +62,13 @@ export class BackendStack extends Stack {
     });
 
     const logGroup = new logs.LogGroup(this, 'ApiFunctionLogs', {
-      logGroupName: `/aws/lambda/${envName}-sakekasu-learning-api`,
+      logGroupName: `/aws/lambda/sakekasu-learning-${envName}-api`,
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
     const fn = new NodejsFunction(this, 'ApiFunction', {
-      functionName: `${envName}-sakekasu-learning-api`,
+      functionName: `sakekasu-learning-${envName}-api`,
       entry: path.join(here, '../lambda/api/index.ts'),
       handler: 'handler',
       runtime: lambda.Runtime.NODEJS_22_X,
@@ -107,7 +107,7 @@ export class BackendStack extends Stack {
     });
 
     this.httpApi = new apigw.HttpApi(this, 'HttpApi', {
-      apiName: `${envName}-sakekasu-learning-api`,
+      apiName: `sakekasu-learning-${envName}-api`,
       corsPreflight: {
         allowOrigins: allowedOrigins,
         allowMethods: [
@@ -148,7 +148,7 @@ export class BackendStack extends Stack {
       name: 'api-errors',
       description:
         '学習 API の Lambda が異常終了しています（タイムアウトや起動時の失敗）。' +
-        `まず CloudWatch Logs の /aws/lambda/${envName}-sakekasu-learning-api を見る`,
+        `まず CloudWatch Logs の /aws/lambda/sakekasu-learning-${envName}-api を見る`,
       metric: fn.metricErrors({ period: fiveMinutes, statistic: 'Sum' }),
       threshold: 1,
     });
@@ -168,7 +168,7 @@ export class BackendStack extends Stack {
       name: 'api-5xx',
       description:
         '学習 API が 5xx を返しています（問題の表示や回答の記録に失敗しています）。' +
-        `まず CloudWatch Logs の /aws/lambda/${envName}-sakekasu-learning-api で internal error の直前のログを見る`,
+        `まず CloudWatch Logs の /aws/lambda/sakekasu-learning-${envName}-api で internal error の直前のログを見る`,
       metric: this.httpApi.metricServerError({ period: fiveMinutes, statistic: 'Sum' }),
       threshold: 3,
     });

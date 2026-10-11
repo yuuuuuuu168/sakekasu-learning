@@ -97,7 +97,7 @@ context を消せばいつでもその状態に戻せる。
 `provider` が `anthropic` なら Claude API で答えている。
 
 Claude API で答えられず Bedrock に回したときは `[chat] fallback {"fallback": true, ..., "errorType": ...}` が出て、
-アラーム `dev-sakekasu-learning-agent-chat-fallbacks` が鳴る。
+アラーム `sakekasu-learning-dev-agent-chat-fallbacks` が鳴る。
 
 | `errorType` | 疑うところ |
 | --- | --- |

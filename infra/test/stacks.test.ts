@@ -200,7 +200,7 @@ describe('stacks', () => {
       const all = [...alarmsOf(t.backend), ...alarmsOf(t.agent)];
       expect(all.length).toBeGreaterThanOrEqual(8);
       for (const alarm of all) {
-        expect(alarm.AlarmName).toMatch(/^test-sakekasu-learning-/);
+        expect(alarm.AlarmName).toMatch(/^sakekasu-learning-test-/);
         expect(alarm.AlarmActions, String(alarm.AlarmName)).toEqual([topicArn]);
         expect(alarm.OKActions, String(alarm.AlarmName)).toEqual([topicArn]);
         expect(alarm.AlarmDescription).toEqual(expect.any(String));
@@ -219,8 +219,8 @@ describe('stacks', () => {
 
     it('API の Lambda のエラーとスロットリング', () => {
       for (const [name, metricName] of [
-        ['test-sakekasu-learning-api-errors', 'Errors'],
-        ['test-sakekasu-learning-api-throttles', 'Throttles'],
+        ['sakekasu-learning-test-api-errors', 'Errors'],
+        ['sakekasu-learning-test-api-throttles', 'Throttles'],
       ]) {
         expect(alarmNamed(t.backend, name)).toMatchObject({
           Namespace: 'AWS/Lambda',
@@ -236,7 +236,7 @@ describe('stacks', () => {
     });
 
     it('HTTP API の 5xx は ApiId で 5 分に 3 回から', () => {
-      const alarm = alarmNamed(t.backend, 'test-sakekasu-learning-api-5xx');
+      const alarm = alarmNamed(t.backend, 'sakekasu-learning-test-api-5xx');
       expect(alarm).toMatchObject({
         Namespace: 'AWS/ApiGateway',
         MetricName: '5xx',
@@ -247,7 +247,7 @@ describe('stacks', () => {
     });
 
     it('回答履歴のテーブルのスロットリングは読みと書きを足して見る', () => {
-      const alarm = alarmNamed(t.backend, 'test-sakekasu-learning-progress-throttles');
+      const alarm = alarmNamed(t.backend, 'sakekasu-learning-test-progress-throttles');
       expect(alarm).toMatchObject({ Threshold: 1, TreatMissingData: 'notBreaching' });
       const metrics = alarm.Metrics as {
         Expression?: string;
@@ -260,10 +260,10 @@ describe('stacks', () => {
 
     it('AI チャットの Runtime のシステムエラー・スロットリング・認可失敗', () => {
       for (const [name, metricName, threshold] of [
-        ['test-sakekasu-learning-agent-system-errors', 'SystemErrors', 1],
-        ['test-sakekasu-learning-agent-throttles', 'Throttles', 1],
-        ['test-sakekasu-learning-agent-auth-unauthorized', 'InboundAuthorizationFailure', 3],
-        ['test-sakekasu-learning-agent-auth-invalid-token', 'InboundAuthorizationFailure', 3],
+        ['sakekasu-learning-test-agent-system-errors', 'SystemErrors', 1],
+        ['sakekasu-learning-test-agent-throttles', 'Throttles', 1],
+        ['sakekasu-learning-test-agent-auth-unauthorized', 'InboundAuthorizationFailure', 3],
+        ['sakekasu-learning-test-agent-auth-invalid-token', 'InboundAuthorizationFailure', 3],
       ] as const) {
         const alarm = alarmNamed(t.agent, name);
         expect(alarm).toMatchObject({
@@ -279,7 +279,7 @@ describe('stacks', () => {
     });
 
     it('AI チャットへの相談が 1 時間に 60 回を超えたら知らせる', () => {
-      expect(alarmNamed(t.agent, 'test-sakekasu-learning-agent-invocations-high')).toMatchObject({
+      expect(alarmNamed(t.agent, 'sakekasu-learning-test-agent-invocations-high')).toMatchObject({
         Namespace: 'AWS/Bedrock-AgentCore',
         MetricName: 'Invocations',
         Statistic: 'Sum',
@@ -356,7 +356,7 @@ describe('Claude API の ID 連携（context anthropicFederation）', () => {
     const filter = Object.values(agent.findResources('AWS::Logs::MetricFilter'))[0];
     expect(JSON.stringify(filter.Properties.LogGroupName)).toContain('AgentRuntimeId');
     agent.hasResourceProperties('AWS::CloudWatch::Alarm', {
-      AlarmName: 'test-sakekasu-learning-agent-chat-fallbacks',
+      AlarmName: 'sakekasu-learning-test-agent-chat-fallbacks',
       Namespace: 'sakekasu-learning',
       MetricName: 'test-chat-fallbacks',
       Statistic: 'Sum',

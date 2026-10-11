@@ -339,7 +339,7 @@ export class AgentStack extends Stack {
       );
       const fallbacks = new logs.MetricFilter(this, 'ChatFallbackFilter', {
         logGroup: runtimeLogGroup,
-        filterName: `${envName}-sakekasu-learning-chat-fallbacks`,
+        filterName: `sakekasu-learning-${envName}-chat-fallbacks`,
         filterPattern: logs.FilterPattern.literal('"[chat] fallback"'),
         metricNamespace: 'sakekasu-learning',
         metricName: `${envName}-chat-fallbacks`,

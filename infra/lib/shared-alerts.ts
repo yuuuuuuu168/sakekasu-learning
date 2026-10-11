@@ -16,7 +16,7 @@ export const SHARED_ALERT_REGION = 'ap-northeast-1';
  * 当たらないと Slack に「不明なアプリ」と出る
  */
 export function alarmPrefix(envName: string): string {
-  return `${envName}-sakekasu-learning-`;
+  return `sakekasu-learning-${envName}-`;
 }
 
 export interface SharedAlarmOptions {
