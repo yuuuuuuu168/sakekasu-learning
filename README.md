@@ -102,7 +102,7 @@ agent/     AI 家庭教師（Strands Agents / AgentCore Runtime）
 
 ## 初回セットアップ
 
-前提: sakekasu-builder と同じアカウントで、CDK のブートストラップが ap-northeast-1 で済んでいること（github-oidc スタック用）。
+前提: アプリ用の AWS アカウントで、CDK のブートストラップが ap-northeast-1 で済んでいること（github-oidc スタック用）。
 
 ### 1. DNS（サブドメインの委任）
 
