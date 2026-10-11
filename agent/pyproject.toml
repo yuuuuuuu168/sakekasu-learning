@@ -4,11 +4,12 @@ version = "0.1.0"
 description = "sakekasu-learning AI tutor (AgentCore Runtime, Strands Agents)"
 requires-python = ">=3.13"
 dependencies = [
+    "anthropic>=0.125.0",
     "bedrock-agentcore>=1.0.3",
     "boto3>=1.40.0",
     "mcp>=1.20.0",
     "pyjwt[crypto]>=2.9.0",
-    "strands-agents>=1.13.0",
+    "strands-agents[anthropic]>=1.13.0",
 ]
 
 [dependency-groups]

@@ -13,16 +13,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from typing import Any
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
-from strands import Agent
-from strands.models.bedrock import BedrockModel
+from strands import Agent, ModelRetryStrategy
 from strands.tools.mcp import MCPClient
 
 from auth import verify_access_token
+from llm import ModelChoice, RefusalError, create_model, fallback_reason, model_chain
 from question_context import QuestionContext, render_question, resolve_question
 from quota import QuotaResult, consume as consume_quota, daily_limit
 
@@ -31,9 +32,9 @@ log = logging.getLogger("tutor")
 
 app = BedrockAgentCoreApp()
 
-MODEL_ID = os.environ.get("MODEL_ID", "global.moonshotai.kimi-k3")
-# MODEL_ID が応答を1文字も返さないうちに失敗したときに使うモデル（空なら切り替えない）
-FALLBACK_MODEL_ID = os.environ.get("FALLBACK_MODEL_ID", "")
+# 試す順のモデル（llm.model_chain）。Claude API → Bedrock の MODEL_ID → FALLBACK_MODEL_ID。
+# 前のモデルが応答を1文字も返さないうちに失敗したときだけ、次のモデルで答え直す
+MODELS = model_chain()
 AWS_KNOWLEDGE_MCP_URL = os.environ.get("AWS_KNOWLEDGE_MCP_URL", "https://knowledge-mcp.global.api.aws")
 DOC_TOOLS = [
     "aws___search_documentation",
@@ -92,7 +93,7 @@ def _sanitize_history(history: Any) -> list[dict[str, Any]]:
     return messages
 
 
-def _build_agent(ctx: QuestionContext, history: list[dict[str, Any]], model_id: str = MODEL_ID) -> Agent:
+def _build_agent(ctx: QuestionContext, history: list[dict[str, Any]], choice: ModelChoice) -> Agent:
     docs = MCPClient(
         url=AWS_KNOWLEDGE_MCP_URL,
         tool_filters={"allowed": DOC_TOOLS},
@@ -106,12 +107,31 @@ def _build_agent(ctx: QuestionContext, history: list[dict[str, Any]], model_id: 
         question=render_question(ctx),
     )
     return Agent(
-        model=BedrockModel(model_id=model_id, max_tokens=4096),
+        model=create_model(choice),
         system_prompt=system_prompt,
         tools=[docs],
         messages=history,
         callback_handler=None,
+        # Claude API は SDK が再試行するので、流量制限で待ち続けずに次のモデルへ回す。
+        # Bedrock は従来どおり Strands の既定（数回待って再試行）
+        **({"retry_strategy": ModelRetryStrategy(max_attempts=1)} if choice.provider == "anthropic" else {}),
     )
+
+
+def _log_usage(choice: ModelChoice, result: Any) -> None:
+    """1 回の相談の消費（ツールを挟んだ複数回の呼び出しの合計）。1 行の JSON にして、
+    CloudWatch Logs Insights で呼び先ごとのトークン数やキャッシュの効きを集計できるようにする。"""
+    usage = getattr(getattr(result, "metrics", None), "accumulated_usage", None) or {}
+    entry = {
+        "provider": choice.provider,
+        "model": choice.model_id,
+        "stopReason": getattr(result, "stop_reason", None),
+        "input": usage.get("inputTokens", 0),
+        "output": usage.get("outputTokens", 0),
+        "cacheRead": usage.get("cacheReadInputTokens", 0),
+        "cacheWrite": usage.get("cacheWriteInputTokens", 0),
+    }
+    log.info("[chat] llm %s", json.dumps(entry))
 
 
 @app.entrypoint
@@ -153,10 +173,9 @@ async def invoke(payload: Any, context: Any):
         return
 
     log.info("相談を受け付けました question=%s answered=%s", ctx.question_id, bool(ctx.selected))
-    models = [m for m in dict.fromkeys([MODEL_ID, FALLBACK_MODEL_ID]) if m]
-    for i, model_id in enumerate(models):
+    for i, choice in enumerate(MODELS):
         # 会話履歴は Agent が書き換えるため、モデルごとに作り直す
-        agent = _build_agent(ctx, _sanitize_history(payload.get("history")), model_id)
+        agent = _build_agent(ctx, _sanitize_history(payload.get("history")), choice)
         started = False
         # ツールを呼ぶ前の前置きと呼んだ後の本文が改行なしでつながると、本文冒頭の見出し（##）が
         # Markdown として崩れるため、ツールを挟んで本文を再開するときは空行を入れる
@@ -174,15 +193,30 @@ async def invoke(payload: Any, context: Any):
                         break_before_text = False
                     started = True
                     yield data
+                result = event.get("result")
+                if result is not None:
+                    _log_usage(choice, result)
+                    if not started and getattr(result, "stop_reason", None) == "refusal":
+                        raise RefusalError("モデルが回答を断りました")
             return
-        except Exception:
-            log.exception("エージェントの実行に失敗しました model=%s", model_id)
+        except Exception as error:
+            log.exception("エージェントの実行に失敗しました provider=%s model=%s", choice.provider, choice.model_id)
             # 途中まで返した後に別モデルでやり直すと文章が重複するため、切り替えるのは
             # まだ何も返していないときだけにする
-            if started or i == len(models) - 1:
+            if started or i == len(MODELS) - 1:
                 yield "\n\n（応答の生成中にエラーが発生しました。時間をおいてもう一度お試しください）"
                 return
-            log.warning("次のモデルで再試行します model=%s", models[i + 1])
+            following = MODELS[i + 1]
+            entry = {
+                "fallback": True,
+                "from": choice.provider,
+                "fromModel": choice.model_id,
+                "to": following.provider,
+                "toModel": following.model_id,
+                "errorType": fallback_reason(error, choice.provider),
+                "message": str(error)[:300],
+            }
+            log.warning("[chat] fallback %s", json.dumps(entry, ensure_ascii=False))
 
 
 if __name__ == "__main__":
