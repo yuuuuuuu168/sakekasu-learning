@@ -18,7 +18,13 @@ import { Hub } from 'aws-amplify/utils';
 import { getCurrentUser, signInWithRedirect, signOut } from 'aws-amplify/auth';
 import { GraduationCap, LoaderCircle, LogIn } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { consumeSsoHint, createSsoAutoSignIn, isOAuthCallback, redirectErrorMessage } from './oauth';
+import {
+  consumeSsoHint,
+  createSsoAutoSignIn,
+  isOAuthCallback,
+  redirectErrorMessage,
+  signOutRedirectUrl,
+} from './oauth';
 
 interface AuthContextValue {
   signOut: () => Promise<void>;
@@ -122,9 +128,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const handleSignOut = useCallback(async () => {
-    // マネージドログインのログアウト（/logout）へ移り、戻り先の / に帰ってくる。
+    // マネージドログインのログアウト（/logout）へ移り、本番はポータルのトップ、手元は / に着く。
     // ログイン画面のセッションも消えるので、ほかのアプリも次はログインし直しになる
-    await signOut();
+    await signOut({ global: false, oauth: { redirectUrl: signOutRedirectUrl(window.location.origin) } });
     setStatus('signedOut');
   }, []);
 

@@ -23,6 +23,12 @@
 ボタンを出さずに自動でマネージドログインへ送る（共通ログインでログイン済みなので、そのまま戻ってくる）。
 目印の `sso` は読み込み時に URL から外し、戻り先も素の `/` なので、行き来し続けることはない（`web/src/auth/oauth.ts`）。
 
+ログアウトはマネージドログインの `/logout` を通し、本番ではポータルのトップ（`https://sakekasu-builder.com/`）に着く。
+手元（`http://localhost:5173`）では今までどおりそのオリジンの `/` に戻る。ポータルの URL は共通のアプリクライアントの
+`logoutUrls`（sakekasu-integrated_environment の `infra/cdk.json`）に登録してあるものと末尾の `/` まで一致させる。
+Amplify v6 の `signOut` は、戻り先を指定しないと `redirectSignOut` から今と同じオリジンの URL しか選ばないので、
+`signOut({ global: false, oauth: { redirectUrl } })` で明示している（`signOutRedirectUrl`）。
+
 共通ログインのクライアントのスコープは `openid` `email` `profile` だけで、`aws.cognito.signin.user.admin` が無い。
 Amplify の `fetchUserAttributes` / `updatePassword` / `setUpTOTP` などは使えない（画面はユーザー名もメールも表示しない）。
 

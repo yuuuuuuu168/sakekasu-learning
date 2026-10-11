@@ -12,9 +12,37 @@ import type { AppConfig } from '../config';
 export const OAUTH_SCOPES = ['openid', 'email', 'profile'];
 
 /**
- * Amplify の Auth 設定。戻り先は「今開いているオリジン + /」で、共通ログイン側に
+ * 本番でログアウトしたあとに着く先。4 アプリ共通のポータルのトップ。
+ * このアプリのログイン画面に戻すと、ログアウトしたのにまたログインを促されるだけなので、ポータルに帰す。
+ * 共通のアプリクライアントの logout_uri に登録してある値と、末尾の / まで一致させる
+ * （sakekasu-integrated_environment の infra/cdk.json の logoutUrls）
+ */
+export const PORTAL_SIGN_OUT_URL = 'https://sakekasu-builder.com/';
+
+/** 手元の開発サーバー（http://localhost:5173 など）か */
+function isLocalOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * ログアウト後の戻り先。本番はポータルのトップ、手元はそのオリジンの / 。
+ * Amplify の signOut は戻り先を指定しないと redirectSignOut から「今と同じオリジン」の URL しか選ばない
+ * （別オリジンだけだと InvalidOriginException）。ポータルは別オリジンなので、
+ * redirectSignOut に入れたうえで signOut({ oauth: { redirectUrl } }) に同じ値を渡す
+ */
+export function signOutRedirectUrl(origin: string): string {
+  return isLocalOrigin(origin) ? `${origin.replace(/\/+$/, '')}/` : PORTAL_SIGN_OUT_URL;
+}
+
+/**
+ * Amplify の Auth 設定。ログインの戻り先は「今開いているオリジン + /」で、共通ログイン側に
  * 登録してある URL（https://learning.sakekasu-builder.com/ と http://localhost:5173/）と
- * 末尾の / まで一致させる。
+ * 末尾の / まで一致させる。ログアウトの戻り先は signOutRedirectUrl。
  */
 export function amplifyAuthConfig(
   config: Pick<AppConfig, 'userPoolId' | 'userPoolClientId' | 'authDomain'>,
@@ -30,7 +58,7 @@ export function amplifyAuthConfig(
           domain: config.authDomain.replace(/^https?:\/\//, '').replace(/\/+$/, ''),
           scopes: OAUTH_SCOPES,
           redirectSignIn: [redirect],
-          redirectSignOut: [redirect],
+          redirectSignOut: [signOutRedirectUrl(origin)],
           responseType: 'code',
         },
       },
