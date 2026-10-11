@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import { AgentStack } from '../lib/agent-stack';
+import { parseAnthropicFederation } from '../lib/anthropic-federation';
 import { BackendStack } from '../lib/backend-stack';
 import { GithubOidcStack } from '../lib/github-oidc-stack';
 import { parseSharedAuth } from '../lib/shared-auth';
@@ -62,6 +63,9 @@ if (app.node.tryGetContext('github-oidc') === 'true') {
     questionsBucket: backend.questionsBucket,
     modelId: app.node.tryGetContext('agentModelId'),
     fallbackModelId: app.node.tryGetContext('agentFallbackModelId'),
+    anthropicModel: app.node.tryGetContext('agentAnthropicModel'),
+    // Claude API の ID 連携（Claude Console のルール・組織・サービスアカウント・ワークスペースの ID。秘密ではない）
+    anthropicFederation: parseAnthropicFederation(app.node.tryGetContext('anthropicFederation')),
   });
 
   new WebStack(app, `${prefix}-web`, {

@@ -6,9 +6,11 @@ import * as agentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import type * as s3 from 'aws-cdk-lib/aws-s3';
 import { Asset } from 'aws-cdk-lib/aws-s3-assets';
 import type { Construct } from 'constructs';
+import type { AnthropicFederation } from './anthropic-federation';
 import { SharedAlarms } from './shared-alerts';
 import { type SharedAuthConfig, sharedAuthRegion } from './shared-auth';
 
@@ -18,13 +20,27 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const AGENT_PACKAGE_DIR = path.resolve(here, '../../agent/dist/package');
 
 /**
- * 既定のモデル。Kimi K3 だけを使い、予備のモデルは置かない。
+ * Bedrock の既定のモデル。Claude API（下の DEFAULT_ANTHROPIC_MODEL_CHAT）が使えないときの控えで、
+ * ID 連携の値（context `anthropicFederation`）が無い環境ではこれだけで答える。
  * - Kimi K3 は東京からは Global プロファイルしか無い
  * - Sonnet 5 / Opus 5.5 はアカウント単位のアクセス制限で使えない（利用実績を積むと緩和される）
  * `-c agentModelId=...` / `-c agentFallbackModelId=...` で切り替えられる（予備は空なら使わない）。
  */
 export const DEFAULT_MODEL_ID = 'global.moonshotai.kimi-k3';
 export const DEFAULT_FALLBACK_MODEL_ID = '';
+
+/**
+ * Claude API のモデル（AI チャットの既定の呼び先）。Max プランに付く月々のクレジットで払う。
+ * 品質が足りなければ claude-sonnet-5-5 に上げる（`-c agentAnthropicModel=...`）。
+ */
+export const DEFAULT_ANTHROPIC_MODEL_CHAT = 'claude-haiku-5-5';
+
+/**
+ * STS に頼む ID トークン（JWT）の宛先と寿命。agent/src/llm.py の IDENTITY_TOKEN_* と、
+ * Claude Console のフェデレーションルールの audience に合わせてある。
+ */
+export const IDENTITY_TOKEN_AUDIENCE = 'https://api.anthropic.com';
+export const IDENTITY_TOKEN_SECONDS = 300;
 
 /** 1 人あたり 1 日（日本時間）に相談できる回数。agent/src/quota.py が数える */
 export const CHAT_DAILY_LIMIT = 50;
@@ -42,6 +58,10 @@ export interface AgentStackProps extends StackProps {
   questionsBucket: s3.IBucket;
   modelId?: string;
   fallbackModelId?: string;
+  /** Claude API のモデル。省略時は DEFAULT_ANTHROPIC_MODEL_CHAT */
+  anthropicModel?: string;
+  /** Claude API の ID 連携（cdk.json の context `anthropicFederation`）。無ければ Bedrock だけで答える */
+  anthropicFederation?: AnthropicFederation;
 }
 
 /**
@@ -58,6 +78,8 @@ export class AgentStack extends Stack {
     const { envName, sharedAuth, questionsBucket } = props;
     const modelId = props.modelId ?? DEFAULT_MODEL_ID;
     const fallbackModelId = props.fallbackModelId ?? DEFAULT_FALLBACK_MODEL_ID;
+    const anthropicModel = props.anthropicModel ?? DEFAULT_ANTHROPIC_MODEL_CHAT;
+    const federation = props.anthropicFederation;
 
     if (!existsSync(path.join(AGENT_PACKAGE_DIR, 'main.py'))) {
       throw new Error(
@@ -84,6 +106,7 @@ export class AgentStack extends Stack {
       new iam.PolicyStatement({
         sid: 'InvokeModels',
         actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+        // Claude API が使えないときの控え（Kimi K3）にも使うので、ID 連携を入れても残す。
         // Global / Geo 推論プロファイルは、呼び出し元リージョンのプロファイルと
         // ルーティング先の全リージョンの基盤モデルの両方に権限が要る。
         // Claude はアクセス制限が解けたら context で戻せるように残しておく
@@ -149,6 +172,26 @@ export class AgentStack extends Stack {
         ],
       }),
     );
+    /*
+     * Claude API に入るための ID トークン（JWT）を STS からもらう権限。宛先は Anthropic だけ、
+     * 寿命はエージェントが頼む長さまで、署名は RS256 に絞る。JWT は短命で、Anthropic の側でも
+     * ルール（発行者・このロールの ARN・宛先）に合うものしか交換されない。API キーは持たない
+     */
+    if (federation) {
+      role.addToPolicy(
+        new iam.PolicyStatement({
+          sid: 'AnthropicIdentityToken',
+          actions: ['sts:GetWebIdentityToken'],
+          resources: ['*'],
+          conditions: {
+            'ForAllValues:StringEquals': { 'sts:IdentityTokenAudience': [IDENTITY_TOKEN_AUDIENCE] },
+            NumericLessThanEquals: { 'sts:DurationSeconds': IDENTITY_TOKEN_SECONDS },
+            StringEquals: { 'sts:SigningAlgorithm': 'RS256' },
+          },
+        }),
+      );
+    }
+
     questionsBucket.grantRead(role);
 
     // 相談回数の上限（ユーザーごと・1 日ごと）。Runtime はブラウザから直接呼ばれ、API のスロットリングが
@@ -197,6 +240,16 @@ export class AgentStack extends Stack {
       environmentVariables: {
         MODEL_ID: modelId,
         ...(fallbackModelId ? { FALLBACK_MODEL_ID: fallbackModelId } : {}),
+        ...(federation
+          ? {
+              LLM_PROVIDER: 'anthropic',
+              ANTHROPIC_MODEL_CHAT: anthropicModel,
+              ANTHROPIC_FEDERATION_RULE_ID: federation.ruleId,
+              ANTHROPIC_ORGANIZATION_ID: federation.organizationId,
+              ANTHROPIC_SERVICE_ACCOUNT_ID: federation.serviceAccountId,
+              ...(federation.workspaceId ? { ANTHROPIC_WORKSPACE_ID: federation.workspaceId } : {}),
+            }
+          : { LLM_PROVIDER: 'bedrock' }),
         QUESTIONS_BUCKET_NAME: questionsBucket.bucketName,
         COGNITO_USER_POOL_ID: sharedAuth.userPoolId,
         COGNITO_CLIENT_ID: sharedAuth.clientId,
@@ -225,7 +278,7 @@ export class AgentStack extends Stack {
       name: 'agent-system-errors',
       description:
         'AI チャットの Runtime がシステムエラーを返しています（チャットが応答しません）。' +
-        `まず ${runtimeLogs} と、モデル（${modelId}）の利用制限を見る`,
+        `まず ${runtimeLogs} と、モデル（${federation ? `${anthropicModel} / ` : ''}${modelId}）の利用制限を見る`,
       metric: agentCoreMetric('SystemErrors'),
       threshold: 1,
     });
@@ -274,6 +327,34 @@ export class AgentStack extends Stack {
       }),
       threshold: CHAT_INVOCATIONS_ALARM_PER_HOUR,
     });
+
+    // Claude API で答えられず Bedrock に回した相談（agent/src/main.py の「[chat] fallback」の行）。
+    // クレジット切れや ID 連携の設定の誤りに気づくため。理由はログの errorType を見る（docs/claude-api.md）。
+    // ロググループは AgentCore が最初の呼び出しで作る（Runtime ID と DEFAULT エンドポイントの名前）
+    if (federation) {
+      const runtimeLogGroup = logs.LogGroup.fromLogGroupName(
+        this,
+        'RuntimeLogGroup',
+        `/aws/bedrock-agentcore/runtimes/${runtime.attrAgentRuntimeId}-DEFAULT`,
+      );
+      const fallbacks = new logs.MetricFilter(this, 'ChatFallbackFilter', {
+        logGroup: runtimeLogGroup,
+        filterName: `${envName}-sakekasu-learning-chat-fallbacks`,
+        filterPattern: logs.FilterPattern.literal('"[chat] fallback"'),
+        metricNamespace: 'sakekasu-learning',
+        metricName: `${envName}-chat-fallbacks`,
+        metricValue: '1',
+      });
+      alarms.add('AgentChatFallbacks', {
+        name: 'agent-chat-fallbacks',
+        description:
+          `AI チャットが Claude API（${anthropicModel}）で答えられず、Bedrock（${modelId}）に回しています。` +
+          `Bedrock の費用が増えます。まず ${runtimeLogs} の「[chat] fallback」の errorType を見る` +
+          '（credit_balance ならクレジット切れ、credentials / authentication なら Claude Console の ID 連携の設定）',
+        metric: fallbacks.metric({ statistic: 'Sum', period: Duration.minutes(5) }),
+        threshold: 1,
+      });
+    }
 
     this.runtimeArn = runtime.attrAgentRuntimeArn;
     new CfnOutput(this, 'RuntimeArn', { value: runtime.attrAgentRuntimeArn });

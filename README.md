@@ -4,8 +4,8 @@
 
 - 招待制のログイン（4 アプリ共通のログイン `auth.sakekasu-builder.com`。Cognito のマネージドログイン）。MFA 必須（認証アプリの TOTP）。回答履歴をユーザーごとに記録し、直近2回の正誤で習熟度を判定する
 - 問題文はそのまま、選択肢は毎回シャッフルして出題する。解説は回答後に折りたたみで表示する
-- 問題ごとに AI（Claude Sonnet）に相談できる。AWS 公式ドキュメントを MCP で参照しながら答える
-- AI への相談は 1 人あたり 1 日 50 回まで（日本時間の 0 時に戻る）。Bedrock の費用がかさまないよう、モデルを呼ぶ前に DynamoDB で数える（`agent/src/quota.py`）
+- 問題ごとに AI（Claude API の Claude Haiku 5.5。使えないときは Bedrock の Kimi K3）に相談できる。AWS 公式ドキュメントを MCP で参照しながら答える
+- AI への相談は 1 人あたり 1 日 50 回まで（日本時間の 0 時に戻る）。モデルの費用がかさまないよう、モデルを呼ぶ前に DynamoDB で数える（`agent/src/quota.py`）
 
 ## 習熟度の判定
 
@@ -26,12 +26,13 @@
    ├──> 共通ログイン（Cognito マネージドログイン。認可コード + PKCE）
    ├──> API Gateway HTTP API (JWT) ──> Lambda ──> DynamoDB（回答履歴）
    │                                        └──> S3（問題データ・非公開）
-   └──> AgentCore Runtime (JWT, Strands) ──> Bedrock (Claude Sonnet)
+   └──> AgentCore Runtime (JWT, Strands) ──> Claude API（Haiku 5.5。ID 連携で入り、API キーを持たない）
+                                         ├──> Bedrock（Kimi K3。Claude API が使えないときの控え）
                                          ├──> S3（問題データ・非公開）
                                          └──> AWS Knowledge MCP（公式ドキュメント検索）
 ```
 
-- すべてサーバーレス。固定費はほぼゼロで、ランニングコストの大半は Bedrock の利用料になる
+- すべてサーバーレス。固定費はほぼゼロ。AI チャットは Max プランに付く月々の Claude API クレジットで払い、Bedrock の利用料は控えに回ったときだけかかる
 - 正解と解説は回答を送信するまで API が返さない。採点もサーバーで行う
 - AI チャットは問題の本文・正解・解説をクライアントから受け取らず、Runtime が非公開バケットから読む
 - CloudFront の証明書は us-east-1 にしか置けないため、配信スタックだけ us-east-1。フロントは起動時に `/config.json` を読んで接続先を知るので、リージョンをまたいだスタック参照は無い
@@ -162,11 +163,21 @@ CloudFormation（`cdk deploy`）でデプロイ済みのスタックがあると
 cd infra && AWS_PROFILE=sakekasu-builder bash scripts/cdkd-stacks.sh migrate
 ```
 
+### AI チャットのモデル
+
+既定の呼び先は Claude API の Claude Haiku 5.5（`claude-haiku-5-5`）。API キーは持たず、Runtime のロールが
+STS で取った JWT を Anthropic の短命のトークンと交換する（Workload Identity Federation）。
+設定の手順・環境変数・IAM の差分・失敗したときの見分け方は [docs/claude-api.md](docs/claude-api.md) にある。
+`infra/cdk.json` の context `anthropicFederation` が無い環境では、下の Bedrock のモデルだけで答える。
+
+Claude API で答えられないとき（クレジット切れ・認証の失敗・障害・モデルが断ったとき）は、
+応答を返し始める前に限って Bedrock のモデルで答え直す。
+
 ### Bedrock のモデル
 
-既定は Kimi K3（`global.moonshotai.kimi-k3`、東京からは Global プロファイルのみ）で、予備のモデルは置かない。
+控えのモデルは Kimi K3（`global.moonshotai.kimi-k3`、東京からは Global プロファイルのみ）。
 `infra/cdk.json` の context の `agentModelId` / `agentFallbackModelId` で変更できる。
-予備を設定すると、応答を返し始める前に失敗したときだけ予備のモデルで答え直す。
+予備を設定すると、Kimi K3 でも答えられないときに予備のモデルで答え直す。
 
 Sonnet 5 / Opus 5.5 などの新しいモデルは、契約済みでもアカウント単位のアクセス制限で
 `AccessDeniedException: ... is not available for this account` になることがある（2026-09 時点のサポート回答。

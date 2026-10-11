@@ -3,6 +3,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { AGENT_PACKAGE_DIR, AgentStack } from '../lib/agent-stack';
+import { type AnthropicFederation, parseAnthropicFederation } from '../lib/anthropic-federation';
 import { BackendStack } from '../lib/backend-stack';
 import { parseSharedAuth } from '../lib/shared-auth';
 import { WebStack } from '../lib/web-stack';
@@ -15,7 +16,14 @@ const sharedAuth = {
 };
 const issuer = `https://cognito-idp.ap-northeast-1.amazonaws.com/${sharedAuth.userPoolId}`;
 
-function synth() {
+const federation: AnthropicFederation = {
+  ruleId: 'fdrl_test',
+  organizationId: '00000000-0000-0000-0000-000000000000',
+  serviceAccountId: 'svac_test',
+  workspaceId: 'wrkspc_test',
+};
+
+function synth(anthropicFederation?: AnthropicFederation) {
   const app = new cdk.App();
   const env = { account, region: 'ap-northeast-1' };
   const backend = new BackendStack(app, 'backend', {
@@ -29,6 +37,7 @@ function synth() {
     envName: 'test',
     sharedAuth,
     questionsBucket: backend.questionsBucket,
+    anthropicFederation,
   });
   const web = new WebStack(app, 'web', {
     env: { account, region: 'us-east-1' },
@@ -101,7 +110,7 @@ describe('stacks', () => {
     });
   });
 
-  it('AgentCore Runtime は共通ログインの JWT で保護し、Kimi K3 だけを使う', () => {
+  it('AgentCore Runtime は共通ログインの JWT で保護し、ID 連携が無ければ Kimi K3 だけを使う', () => {
     t.agent.hasResourceProperties('AWS::BedrockAgentCore::Runtime', {
       AuthorizerConfiguration: {
         CustomJWTAuthorizer: {
@@ -114,6 +123,8 @@ describe('stacks', () => {
         COGNITO_CLIENT_ID: sharedAuth.clientId,
         MODEL_ID: 'global.moonshotai.kimi-k3',
         FALLBACK_MODEL_ID: Match.absent(),
+        LLM_PROVIDER: 'bedrock',
+        ANTHROPIC_FEDERATION_RULE_ID: Match.absent(),
       }),
       AgentRuntimeArtifact: {
         CodeConfiguration: Match.objectLike({ Runtime: 'PYTHON_3_13', EntryPoint: ['main.py'] }),
@@ -278,6 +289,95 @@ describe('stacks', () => {
         TreatMissingData: 'notBreaching',
       });
     });
+  });
+});
+
+describe('Claude API の ID 連携（context anthropicFederation）', () => {
+  let agent: Template;
+  let bedrockOnly: Template;
+  beforeAll(() => {
+    agent = synth(federation).agent;
+    bedrockOnly = synth().agent;
+  }, 120_000);
+
+  function statements(template: Template) {
+    return Object.values(template.findResources('AWS::IAM::Policy')).flatMap(
+      (policy) => policy.Properties.PolicyDocument.Statement as { Sid?: string; Action: string | string[] }[],
+    );
+  }
+
+  it('Claude API（Haiku 5.5）を既定にし、Kimi K3 を控えに残す', () => {
+    agent.hasResourceProperties('AWS::BedrockAgentCore::Runtime', {
+      EnvironmentVariables: Match.objectLike({
+        LLM_PROVIDER: 'anthropic',
+        ANTHROPIC_MODEL_CHAT: 'claude-haiku-5-5',
+        ANTHROPIC_FEDERATION_RULE_ID: 'fdrl_test',
+        ANTHROPIC_ORGANIZATION_ID: federation.organizationId,
+        ANTHROPIC_SERVICE_ACCOUNT_ID: 'svac_test',
+        ANTHROPIC_WORKSPACE_ID: 'wrkspc_test',
+        MODEL_ID: 'global.moonshotai.kimi-k3',
+      }),
+    });
+  });
+
+  it('API キーを持たない（Secrets Manager も環境変数も使わない）', () => {
+    const runtime = Object.values(agent.findResources('AWS::BedrockAgentCore::Runtime'))[0];
+    expect(Object.keys(runtime.Properties.EnvironmentVariables)).not.toContain('ANTHROPIC_API_KEY');
+    agent.resourceCountIs('AWS::SecretsManager::Secret', 0);
+    const actions = statements(agent).flatMap((st) => [st.Action].flat());
+    expect(actions.filter((a) => a.startsWith('secretsmanager:'))).toEqual([]);
+  });
+
+  it('STS の ID トークンは Anthropic 宛て・5 分まで・RS256 に絞る', () => {
+    const st = statements(agent).find((s) => s.Sid === 'AnthropicIdentityToken');
+    expect(st).toMatchObject({
+      Action: 'sts:GetWebIdentityToken',
+      Resource: '*',
+      Condition: {
+        'ForAllValues:StringEquals': { 'sts:IdentityTokenAudience': ['https://api.anthropic.com'] },
+        NumericLessThanEquals: { 'sts:DurationSeconds': 300 },
+        StringEquals: { 'sts:SigningAlgorithm': 'RS256' },
+      },
+    });
+    expect(statements(bedrockOnly).find((s) => s.Sid === 'AnthropicIdentityToken')).toBeUndefined();
+  });
+
+  it('Bedrock の呼び出し権限は控えのために残す', () => {
+    expect(statements(agent).find((s) => s.Sid === 'InvokeModels')).toBeDefined();
+  });
+
+  it('Bedrock に回した相談をログから数えて知らせる', () => {
+    agent.hasResourceProperties('AWS::Logs::MetricFilter', {
+      FilterPattern: '"[chat] fallback"',
+      MetricTransformations: [
+        { MetricNamespace: 'sakekasu-learning', MetricName: 'test-chat-fallbacks', MetricValue: '1' },
+      ],
+    });
+    const filter = Object.values(agent.findResources('AWS::Logs::MetricFilter'))[0];
+    expect(JSON.stringify(filter.Properties.LogGroupName)).toContain('AgentRuntimeId');
+    agent.hasResourceProperties('AWS::CloudWatch::Alarm', {
+      AlarmName: 'test-sakekasu-learning-agent-chat-fallbacks',
+      Namespace: 'sakekasu-learning',
+      MetricName: 'test-chat-fallbacks',
+      Statistic: 'Sum',
+      Threshold: 1,
+      TreatMissingData: 'notBreaching',
+    });
+    bedrockOnly.resourceCountIs('AWS::Logs::MetricFilter', 0);
+  });
+});
+
+describe('parseAnthropicFederation', () => {
+  it('cdk.json の値を受け付け、無ければ undefined', () => {
+    expect(parseAnthropicFederation(federation)).toEqual(federation);
+    expect(parseAnthropicFederation(undefined)).toBeUndefined();
+  });
+
+  it('形の誤りは止める（打ち間違いのまま出すと、毎回 Bedrock に回って気づきにくい）', () => {
+    expect(() => parseAnthropicFederation({ ...federation, ruleId: 'rule' })).toThrow('ruleId');
+    expect(() => parseAnthropicFederation({ ...federation, organizationId: 'org' })).toThrow('organizationId');
+    expect(() => parseAnthropicFederation({ ...federation, serviceAccountId: '' })).toThrow('serviceAccountId');
+    expect(() => parseAnthropicFederation({ ...federation, workspaceId: 'ws' })).toThrow('workspaceId');
   });
 });
 
