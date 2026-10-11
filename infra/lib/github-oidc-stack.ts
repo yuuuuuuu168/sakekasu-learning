@@ -71,7 +71,7 @@ export class GithubOidcStack extends Stack {
       statements: deployGuardrailStatements({
         account: this.account,
         app: 'learning',
-        resourceNamePrefix: 'sakekasu-learning-',
+        resourceNamePrefixes: ['sakekasu-learning-'],
         // agent-stack.ts の agentRuntimeName（sakekasu_learning_<env>_tutor）。Runtime の名前は _ しか使えない
         agentRuntimeNamePrefix: 'sakekasu_learning_',
         protectedRoleNames: [
