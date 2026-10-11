@@ -18,6 +18,11 @@
 パスワードの入力・初回のパスワード変更・認証アプリ（TOTP）の登録・パスワードの再設定は、どれも
 マネージドログインの画面が行う。1 つのアプリでログインすれば、ほかのアプリは入力なしで入れる。
 
+未ログインで開いたときは、ログインボタンを押してマネージドログインへ移るのが原則。例外として、ポータル
+（`https://sakekasu-builder.com/apps`）のリンク `https://learning.sakekasu-builder.com/?sso=1` から来たときは、
+ボタンを出さずに自動でマネージドログインへ送る（共通ログインでログイン済みなので、そのまま戻ってくる）。
+目印の `sso` は読み込み時に URL から外し、戻り先も素の `/` なので、行き来し続けることはない（`web/src/auth/oauth.ts`）。
+
 共通ログインのクライアントのスコープは `openid` `email` `profile` だけで、`aws.cognito.signin.user.admin` が無い。
 Amplify の `fetchUserAttributes` / `updatePassword` / `setUpTOTP` などは使えない（画面はユーザー名もメールも表示しない）。
 
