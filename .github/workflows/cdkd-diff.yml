@@ -91,8 +91,19 @@ jobs:
           set +e
           bash scripts/cdkd-stacks.sh preview > raw.txt 2>&1
           echo "exit=$?" >> "$GITHUB_OUTPUT"
+          account=$(aws sts get-caller-identity --query Account --output text)
           # cdkd は NO_COLOR でも色のエスケープシーケンスを出すので、コメントに載せる前に落とす
-          sed -E 's/\x1b\[[0-9;]*m//g' raw.txt > diff.txt
+          sed -E 's/\x1b\[[0-9;]*m//g' raw.txt > clean.txt
+          # cdkd は全アプリのスタックの状態を読もうとし、diff ロールは learning の状態しか読めないので、
+          # 他のアプリの分が「Failed to read state」で大量に出る。差分には関係しないうえ、アカウント ID と
+          # 他のアプリのスタック名が並ぶので、件数だけ残して省く。learning 自身の状態を読めなかった行は残す
+          awk '
+            /^Failed to read state for stack / && $7 !~ /^sakekasu-learning/ { skipped++; next }
+            { print }
+            END { if (skipped) printf "\n（他のアプリの状態を読めない、という行を %d 件省いた。diff の結果には関係しない）\n", skipped }
+          ' clean.txt > filtered.txt
+          # PR のコメントに残るので、アカウント ID を伏せる（docs/aws-infra-rules.md の「cdkd の落とし穴」）
+          sed "s/${account}/<アカウント>/g" filtered.txt > diff.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cdkd-diff
