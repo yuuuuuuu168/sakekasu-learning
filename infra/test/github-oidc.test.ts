@@ -140,15 +140,17 @@ describe('github-oidc', () => {
     const statement = (sid: string) =>
       (guardrail[0].Properties.PolicyDocument.Statement as Record<string, unknown>[]).find((s) => s.Sid === sid);
 
-    it('境界の管理ポリシーを名前で作り、IAM と STS と他のアプリのリソースを天井から外す', () => {
+    it('境界の管理ポリシーを名前で作り、IAM とロールの引き受けと他のアプリのリソースを天井から外す', () => {
       const policies = Object.values(t.findResources('AWS::IAM::ManagedPolicy', {
         Properties: { ManagedPolicyName: 'sakekasu-learning-role-boundary' },
       }));
       expect(policies).toHaveLength(1);
       const statements = policies[0].Properties.PolicyDocument.Statement as Record<string, unknown>[];
       expect(statements.find((s) => s.Sid === 'DenyIdentityAndAccountControl')?.Action).toEqual(
-        expect.arrayContaining(['iam:*', 'sts:*', 'organizations:*']),
+        expect.arrayContaining(['iam:*', 'sts:AssumeRole*', 'organizations:*']),
       );
+      // Claude API の ID 連携が sts:GetWebIdentityToken を呼ぶので、STS をまるごとは止めない
+      expect(statements.find((s) => s.Sid === 'DenyIdentityAndAccountControl')?.Action).not.toContain('sts:*');
       expect(statements.find((s) => s.Sid === 'DenyOtherAppsResources')?.Condition).toEqual({
         Null: { 'aws:ResourceTag/App': 'false' },
         StringNotEquals: { 'aws:ResourceTag/App': 'learning' },
