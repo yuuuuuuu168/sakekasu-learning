@@ -10,6 +10,12 @@
       "userPoolId": "ap-northeast-1_yw1VDKtxW",
       "clientId": "290il92ijts07ap3unkae5ql8o"
     },
+    "anthropicFederation": {
+      "ruleId": "fdrl_011uuLFhBFAeibCX1KhV4f6Q",
+      "organizationId": "c155ee76-4f2a-4282-aae0-a453dd5145af",
+      "serviceAccountId": "svac_012sTiDX2CYGTQahRer9YV13",
+      "workspaceId": "wrkspc_01EbZRagnwYLzX1yRiS9gU3p"
+    },
     "@aws-cdk/aws-lambda-nodejs:useLatestRuntimeVersion": true,
     "@aws-cdk/aws-s3:publicAccessBlockedByDefault": true,
     "@aws-cdk/aws-lambda:useCdkManagedLogGroup": true,

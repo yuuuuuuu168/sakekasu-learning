@@ -13,6 +13,8 @@ sakekasu-kakeibo の OCR と同じ方式（あちらの docs/operations.md「Cla
 
 ## 設定の手順（人の手で行う）
 
+dev については 2026-10-11 に済んでいる（ID は `infra/cdk.json` の context `anthropicFederation`）。
+
 1. AWS: IAM → アカウント設定 → **Outbound web identity federation** を有効にする。
    アカウント 232791540685 では kakeibo のときに有効にしてある（2026-10-11 に確認。発行者は
    `https://a15e92fb-70a4-49b6-a827-c01e4ed2a0ae.tokens.sts.global.api.aws`）。
@@ -25,7 +27,9 @@ sakekasu-kakeibo の OCR と同じ方式（あちらの docs/operations.md「Cla
 4. Claude Console: Settings → Service accounts で `sakekasu-learning-chat` を開き、「ワークスペースに追加」で
    `sakekasu-learning` に役割 Developer で入れる。これを忘れるとトークンの交換が 401 になり、
    認証履歴に `sa_not_in_workspace` が出る（kakeibo で一度踏んだ）
-5. Claude Console: ワークスペース `sakekasu-learning` に利用上限（spend limit）をかける
+5. （任意）Claude Console: ワークスペース `sakekasu-learning` に利用上限（spend limit）をかける。
+   dev ではかけていない。相談はアプリ側で 1 人 1 日 50 回までに絞ってあり、クレジットを使い切ると
+   Bedrock に回る（自動チャージを有効にしていると課金に回るので、Billing の設定も見ておく）
 6. `infra/cdk.json` の context に ID を書いて PR にする（どれも秘密ではない）
 
    ```json
@@ -39,6 +43,14 @@ sakekasu-kakeibo の OCR と同じ方式（あちらの docs/operations.md「Cla
 
    `workspaceId` は省かずに書く。ルールが複数のワークスペースを認可していると、省いたときに
    どちらへ入るかがサーバー側の判断になる。
+
+同じ Claude の組織を kakeibo・builder も使うので、ワークスペース・ルール・サービスアカウントはアプリごとに分けてある。
+
+| アプリ | ルール | サービスアカウント | ワークスペース |
+| --- | --- | --- | --- |
+| learning | `sakekasu-learning-workload` | `sakekasu-learning-chat` | `sakekasu-learning` |
+| kakeibo | `sakekasu-kakeibo-workload` | `sakekasu-kakeibo-ocr` | `sakekasu-kakeibo` |
+| builder | `sakekasu-builder-workload` | `sakekasu-builder` | `sakekasu-builder` |
 
 context が無いあいだは、AI チャットは Bedrock（Kimi K3）だけで答える（`LLM_PROVIDER=bedrock`）。
 context を消せばいつでもその状態に戻せる。
