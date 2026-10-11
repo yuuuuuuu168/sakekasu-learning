@@ -2,7 +2,7 @@
 
 アラームはこのリポジトリのスタック（backend、agent）が持ち、通知は共通基盤
 （sakekasu-integrated_environment）の SNS トピック `sakekasu-integrated-alerts`（ap-northeast-1）へ送る。
-共通基盤がそれを Slack に流す。Slack の見出しには、アラーム名の接頭辞 `dev-sakekasu-learning-` から引いた
+共通基盤がそれを Slack に流す。Slack の見出しには、アラーム名の接頭辞 `sakekasu-learning-dev-` から引いた
 「learning」が出る。
 
 送り方の約束（ALARM と OK の両方を送る、接頭辞で始める、ap-northeast-1 に置く、treatMissingData の考え方）は
@@ -22,21 +22,21 @@
 
 ## アラーム一覧
 
-名前は `dev` 環境のもの（`${env}-sakekasu-learning-…`）。`agent-invocations-high` 以外は 5 分間の合計で、1 期間で判定する。
+名前は `dev` 環境のもの（`sakekasu-learning-${env}-…`）。`agent-invocations-high` 以外は 5 分間の合計で、1 期間で判定する。
 treatMissingData はすべて `NOT_BREACHING`（起きたときだけ値が出る指標なので、利用が無い時間に鳴らさない）。
 
 | アラーム名 | スタック | 指標 | 条件 |
 | --- | --- | --- | --- |
-| `dev-sakekasu-learning-api-errors` | backend | `AWS/Lambda` Errors（API の Lambda） | 1 回以上 |
-| `dev-sakekasu-learning-api-throttles` | backend | `AWS/Lambda` Throttles（API の Lambda） | 1 回以上 |
-| `dev-sakekasu-learning-api-5xx` | backend | `AWS/ApiGateway` 5xx（ディメンション ApiId） | 3 回以上 |
-| `dev-sakekasu-learning-progress-throttles` | backend | `AWS/DynamoDB` ReadThrottleEvents + WriteThrottleEvents（回答履歴） | 1 回以上 |
-| `dev-sakekasu-learning-agent-system-errors` | agent | `AWS/Bedrock-AgentCore` SystemErrors | 1 回以上 |
-| `dev-sakekasu-learning-agent-throttles` | agent | `AWS/Bedrock-AgentCore` Throttles | 1 回以上 |
-| `dev-sakekasu-learning-agent-auth-unauthorized` | agent | `AWS/Bedrock-AgentCore` InboundAuthorizationFailure（UnauthorizedInboundTokenException） | 3 回以上 |
-| `dev-sakekasu-learning-agent-auth-invalid-token` | agent | `AWS/Bedrock-AgentCore` InboundAuthorizationFailure（InvalidInboundTokenException） | 3 回以上 |
-| `dev-sakekasu-learning-agent-invocations-high` | agent | `AWS/Bedrock-AgentCore` Invocations（1 時間の合計） | 60 回以上 |
-| `dev-sakekasu-learning-agent-chat-fallbacks` | agent | `sakekasu-learning` dev-chat-fallbacks（Runtime のログの「[chat] fallback」の行を数えるメトリクスフィルタ。ID 連携があるときだけ作る） | 1 回以上 |
+| `sakekasu-learning-dev-api-errors` | backend | `AWS/Lambda` Errors（API の Lambda） | 1 回以上 |
+| `sakekasu-learning-dev-api-throttles` | backend | `AWS/Lambda` Throttles（API の Lambda） | 1 回以上 |
+| `sakekasu-learning-dev-api-5xx` | backend | `AWS/ApiGateway` 5xx（ディメンション ApiId） | 3 回以上 |
+| `sakekasu-learning-dev-progress-throttles` | backend | `AWS/DynamoDB` ReadThrottleEvents + WriteThrottleEvents（回答履歴） | 1 回以上 |
+| `sakekasu-learning-dev-agent-system-errors` | agent | `AWS/Bedrock-AgentCore` SystemErrors | 1 回以上 |
+| `sakekasu-learning-dev-agent-throttles` | agent | `AWS/Bedrock-AgentCore` Throttles | 1 回以上 |
+| `sakekasu-learning-dev-agent-auth-unauthorized` | agent | `AWS/Bedrock-AgentCore` InboundAuthorizationFailure（UnauthorizedInboundTokenException） | 3 回以上 |
+| `sakekasu-learning-dev-agent-auth-invalid-token` | agent | `AWS/Bedrock-AgentCore` InboundAuthorizationFailure（InvalidInboundTokenException） | 3 回以上 |
+| `sakekasu-learning-dev-agent-invocations-high` | agent | `AWS/Bedrock-AgentCore` Invocations（1 時間の合計） | 60 回以上 |
+| `sakekasu-learning-dev-agent-chat-fallbacks` | agent | `sakekasu-learning` dev-chat-fallbacks（Runtime のログの「[chat] fallback」の行を数えるメトリクスフィルタ。ID 連携があるときだけ作る） | 1 回以上 |
 
 補足:
 
@@ -57,7 +57,7 @@ treatMissingData はすべて `NOT_BREACHING`（起きたときだけ値が出�
 
 ```sh
 aws cloudwatch describe-alarm-history --profile verify --region ap-northeast-1 \
-  --alarm-name dev-sakekasu-learning-api-errors \
+  --alarm-name sakekasu-learning-dev-api-errors \
   --history-item-type Action --query 'AlarmHistoryItems[].[Timestamp,HistorySummary]'
 ```
 

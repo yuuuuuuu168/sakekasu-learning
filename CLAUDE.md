@@ -81,7 +81,9 @@ Identity Center のユーザーがグループ `sakekasu` に入っているか�
 
 ## 規約
 
-- スタック名: `sakekasu-learning-<env>-<役割>`、リソース名: `<env>-sakekasu-learning-<名前>`、固定名の IAM ロール: `sakekasu-learning-*`
+- スタック名: `sakekasu-learning-<env>-<役割>`、リソース名: `sakekasu-learning-<env>-<名前>`、固定名の IAM ロール: `sakekasu-learning-*`。
+  DynamoDB のテーブル（`<env>-sakekasu-learning-progress`、`<env>-sakekasu-learning-chat-quota`）だけは旧い順序のまま。
+  名前を変えると作り直しになり、データを移し替える必要があるため
 - IAM ロールの description は ASCII のみ（日本語を入れるとデプロイが 400 で落ちる）
 - データ系リソース（DynamoDB、Cognito、問題バケット）は RETAIN
 - Lambda の LogGroup は明示的に作り、保持は 1 か月
