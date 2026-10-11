@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   OAUTH_SCOPES,
+  PORTAL_SIGN_OUT_URL,
   amplifyAuthConfig,
   consumeSsoHint,
   createSsoAutoSignIn,
   isOAuthCallback,
   redirectErrorMessage,
+  signOutRedirectUrl,
   stripSsoHint,
 } from './oauth';
 
@@ -16,7 +18,7 @@ const config = {
 };
 
 describe('amplifyAuthConfig', () => {
-  it('マネージドログインへ認可コードで送り、戻り先はオリジン + / にする', () => {
+  it('マネージドログインへ認可コードで送り、ログインの戻り先はオリジン + /、ログアウトの戻り先はポータルにする', () => {
     const auth = amplifyAuthConfig(config, 'https://learning.example.com');
     expect(auth.Cognito).toMatchObject({
       userPoolId: config.userPoolId,
@@ -26,7 +28,7 @@ describe('amplifyAuthConfig', () => {
           domain: 'auth.example.com',
           scopes: ['openid', 'email', 'profile'],
           redirectSignIn: ['https://learning.example.com/'],
-          redirectSignOut: ['https://learning.example.com/'],
+          redirectSignOut: ['https://sakekasu-builder.com/'],
           responseType: 'code',
         },
       },
@@ -42,6 +44,24 @@ describe('amplifyAuthConfig', () => {
     const oauth = auth.Cognito.loginWith?.oauth;
     expect(oauth?.domain).toBe('auth.example.com');
     expect(oauth?.redirectSignIn).toEqual(['http://localhost:5173/']);
+    expect(oauth?.redirectSignOut).toEqual(['http://localhost:5173/']);
+  });
+});
+
+describe('signOutRedirectUrl', () => {
+  it('本番のオリジンからはポータルのトップに帰す', () => {
+    expect(PORTAL_SIGN_OUT_URL).toBe('https://sakekasu-builder.com/');
+    expect(signOutRedirectUrl('https://learning.sakekasu-builder.com')).toBe('https://sakekasu-builder.com/');
+  });
+
+  it('手元の開発サーバーからはそのオリジンの / に戻す', () => {
+    expect(signOutRedirectUrl('http://localhost:5173')).toBe('http://localhost:5173/');
+    expect(signOutRedirectUrl('http://localhost:5173/')).toBe('http://localhost:5173/');
+    expect(signOutRedirectUrl('http://127.0.0.1:5173')).toBe('http://127.0.0.1:5173/');
+  });
+
+  it('localhost を名前に含むだけのホストは本番扱いにする', () => {
+    expect(signOutRedirectUrl('https://localhost.example.com')).toBe(PORTAL_SIGN_OUT_URL);
   });
 });
 
