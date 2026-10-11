@@ -36,6 +36,7 @@ treatMissingData はすべて `NOT_BREACHING`（起きたときだけ値が出�
 | `dev-sakekasu-learning-agent-auth-unauthorized` | agent | `AWS/Bedrock-AgentCore` InboundAuthorizationFailure（UnauthorizedInboundTokenException） | 3 回以上 |
 | `dev-sakekasu-learning-agent-auth-invalid-token` | agent | `AWS/Bedrock-AgentCore` InboundAuthorizationFailure（InvalidInboundTokenException） | 3 回以上 |
 | `dev-sakekasu-learning-agent-invocations-high` | agent | `AWS/Bedrock-AgentCore` Invocations（1 時間の合計） | 60 回以上 |
+| `dev-sakekasu-learning-agent-chat-fallbacks` | agent | `sakekasu-learning` dev-chat-fallbacks（Runtime のログの「[chat] fallback」の行を数えるメトリクスフィルタ。ID 連携があるときだけ作る） | 1 回以上 |
 
 補足:
 

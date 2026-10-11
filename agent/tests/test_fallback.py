@@ -1,10 +1,12 @@
 import asyncio
+import json
 import os
 from types import SimpleNamespace
 
 os.environ.setdefault("AWS_REGION", "ap-northeast-1")
 
 import main  # noqa: E402
+from llm import ModelChoice  # noqa: E402
 
 
 class FakeAgent:
@@ -24,12 +26,12 @@ class FakeAgent:
 def _run(monkeypatch, agents):
     used = []
 
-    def build(ctx, history, model_id=None):
-        used.append(model_id)
-        return agents[model_id]
+    def build(ctx, history, choice):
+        used.append(choice.model_id)
+        return agents[choice.model_id]
 
-    monkeypatch.setattr(main, "MODEL_ID", "primary")
-    monkeypatch.setattr(main, "FALLBACK_MODEL_ID", "fallback")
+    models = [ModelChoice("anthropic", "primary"), ModelChoice("bedrock", "fallback")]
+    monkeypatch.setattr(main, "MODELS", [m for m in models if m.model_id in agents])
     monkeypatch.setattr(main, "_build_agent", build)
     monkeypatch.setattr(main, "verify_access_token", lambda _: "user")
     monkeypatch.setattr(main, "consume_quota", lambda _: main.QuotaResult.OK)
@@ -84,3 +86,48 @@ def test_no_blank_line_when_tool_used_before_any_text(monkeypatch):
     agent = ToolAgent([TOOL_EVENT, {"data": "## 結論"}])
     out, _ = _run(monkeypatch, {"primary": agent})
     assert out == "## 結論"
+
+
+class ResultAgent:
+    """本文を返さずに、stop_reason だけを持つ結果で終わる。"""
+
+    def __init__(self, stop_reason):
+        self.stop_reason = stop_reason
+
+    async def stream_async(self, prompt):
+        usage = {"inputTokens": 10, "outputTokens": 0, "cacheReadInputTokens": 5}
+        yield {"result": SimpleNamespace(stop_reason=self.stop_reason, metrics=SimpleNamespace(accumulated_usage=usage))}
+
+
+def test_fallback_when_model_refuses_before_output(monkeypatch, caplog):
+    caplog.set_level("INFO", logger="tutor")
+    out, used = _run(monkeypatch, {"primary": ResultAgent("refusal"), "fallback": FakeAgent(["x"])})
+    assert out == "x"
+    assert used == ["primary", "fallback"]
+    assert any('"errorType": "refusal"' in r.getMessage() for r in caplog.records)
+
+
+def test_fallback_is_logged_as_json(monkeypatch, caplog):
+    out, _ = _run(monkeypatch, {"primary": FakeAgent([], fail_after=0), "fallback": FakeAgent(["x"])})
+    assert out == "x"
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("[chat] fallback "))
+    entry = json.loads(line.removeprefix("[chat] fallback "))
+    assert entry["fallback"] is True
+    assert entry["from"] == "anthropic" and entry["to"] == "bedrock"
+    assert entry["errorType"] == "RuntimeError"
+
+
+def test_usage_is_logged(monkeypatch, caplog):
+    caplog.set_level("INFO", logger="tutor")
+    _run(monkeypatch, {"primary": ResultAgent("end_turn")})
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("[chat] llm "))
+    entry = json.loads(line.removeprefix("[chat] llm "))
+    assert entry == {
+        "provider": "anthropic",
+        "model": "primary",
+        "stopReason": "end_turn",
+        "input": 10,
+        "output": 0,
+        "cacheRead": 5,
+        "cacheWrite": 0,
+    }
