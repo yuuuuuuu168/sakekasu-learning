@@ -132,6 +132,68 @@ describe('github-oidc', () => {
     });
   });
 
+  describe('Permissions Boundary', () => {
+    const boundaryArn = `arn:aws:iam::${account}:policy/sakekasu-learning-role-boundary`;
+    const guardrail = Object.values(t.findResources('AWS::IAM::Policy', {
+      Properties: { PolicyName: 'deploy-guardrail' },
+    }));
+    const statement = (sid: string) =>
+      (guardrail[0].Properties.PolicyDocument.Statement as Record<string, unknown>[]).find((s) => s.Sid === sid);
+
+    it('境界の管理ポリシーを名前で作り、IAM とロールの引き受けと他のアプリのリソースを天井から外す', () => {
+      const policies = Object.values(t.findResources('AWS::IAM::ManagedPolicy', {
+        Properties: { ManagedPolicyName: 'sakekasu-learning-role-boundary' },
+      }));
+      expect(policies).toHaveLength(1);
+      const statements = policies[0].Properties.PolicyDocument.Statement as Record<string, unknown>[];
+      expect(statements.find((s) => s.Sid === 'DenyIdentityAndAccountControl')?.Action).toEqual(
+        expect.arrayContaining(['iam:*', 'sts:AssumeRole*', 'organizations:*']),
+      );
+      // Claude API の ID 連携が sts:GetWebIdentityToken を呼ぶので、STS をまるごとは止めない
+      expect(statements.find((s) => s.Sid === 'DenyIdentityAndAccountControl')?.Action).not.toContain('sts:*');
+      expect(statements.find((s) => s.Sid === 'DenyOtherAppsResources')?.Condition).toEqual({
+        Null: { 'aws:ResourceTag/App': 'false' },
+        StringNotEquals: { 'aws:ResourceTag/App': 'learning' },
+      });
+    });
+
+    it('GitHub Actions のロールには境界を付けない（cdkd 用ロールが iam:* を拒否されて動かなくなる）', () => {
+      for (const role of Object.values(t.findResources('AWS::IAM::Role'))) {
+        expect(role.Properties.PermissionsBoundary).toBeUndefined();
+      }
+    });
+
+    it('このアプリのロールは境界なしでは作れず、境界も信頼ポリシーも外せない', () => {
+      expect(statement('DenyRoleWritesWithoutBoundary')).toMatchObject({
+        Resource: `arn:aws:iam::${account}:role/sakekasu-learning-*`,
+        Condition: { ArnNotEquals: { 'iam:PermissionsBoundary': boundaryArn } },
+      });
+      expect(statement('DenyRemovingBoundaryAndTrust')?.Action).toEqual([
+        'iam:DeleteRolePermissionsBoundary',
+        'iam:UpdateAssumeRolePolicy',
+      ]);
+      expect(statement('DenyRewritingBoundary')?.Resource).toBe(boundaryArn);
+    });
+
+    /*
+     * iam:PermissionsBoundary を渡さないアクションに条件付きの Deny を付けると、
+     * 境界が正しく付いていても常に拒否される
+     */
+    it('条件付きの Deny には iam:PermissionsBoundary を渡すアクションだけを並べる', () => {
+      const supported = [
+        'iam:CreateRole',
+        'iam:PutRolePolicy',
+        'iam:DeleteRolePolicy',
+        'iam:AttachRolePolicy',
+        'iam:DetachRolePolicy',
+        'iam:PutRolePermissionsBoundary',
+        'iam:DeleteRolePermissionsBoundary',
+      ];
+      const actions = [statement('DenyRoleWritesWithoutBoundary')?.Action].flat() as string[];
+      expect(actions.every((a) => supported.includes(a))).toBe(true);
+    });
+  });
+
   it('IAM ロールの description は ASCII だけ（日本語だとデプロイが 400 で落ちる）', () => {
     const roles = Object.values(t.findResources('AWS::IAM::Role'));
     expect(roles.length).toBeGreaterThan(0);

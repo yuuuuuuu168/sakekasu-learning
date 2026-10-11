@@ -2,6 +2,7 @@ import { CfnOutput, Duration, Stack, type StackProps } from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import type { Construct } from 'constructs';
 import { deployGuardrailStatements } from './deploy-guardrail';
+import { createRoleBoundary, roleBoundaryArn } from './role-boundary';
 
 export interface GithubOidcStackProps extends StackProps {
   envName: string;
@@ -60,6 +61,10 @@ export class GithubOidcStack extends Stack {
       maxSessionDuration: Duration.hours(1),
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AdministratorAccess')],
     });
+    // アプリのロールに付ける Permissions Boundary。cdkd に作らせると、cdkd 自身が境界を
+    // 書き換えて外せてしまうので、このスタックで作る（理由は role-boundary.ts）
+    createRoleBoundary(this, 'RoleBoundary');
+
     new iam.Policy(this, 'CdkdGuardrail', {
       policyName: 'deploy-guardrail',
       roles: [cdkdRole],
@@ -74,6 +79,7 @@ export class GithubOidcStack extends Stack {
           'sakekasu-learning-cdkd-deploy',
           'sakekasu-learning-github-actions-diff',
         ],
+        roleBoundaryArn: roleBoundaryArn(this.account),
       }),
     });
     deployRole.addToPolicy(
