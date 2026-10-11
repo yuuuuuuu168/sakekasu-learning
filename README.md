@@ -114,7 +114,7 @@ NS で委任済み。ゾーン ID は `infra/cdk.json` の `hostedZoneId` に入
 
 ```bash
 cd infra && npm ci
-bash scripts/setup-cdkd.sh   # AWS_PROFILE は既定で sakekasu-builder
+AWS_PROFILE=<アプリ用のプロファイル> bash scripts/setup-cdkd.sh
 ```
 
 GitHub Actions 用ロール（github-oidc スタック）をデプロイし、`cdkd bootstrap` で状態を置くバケットを作る。
@@ -144,7 +144,7 @@ git clone git@github.com:yuuuuuuu168/sakekasu-learning-content.git content
 (cd infra && npm ci) && (cd web && npm ci) && (cd agent && uv sync --group dev)
 
 # デプロイ済みの dev 環境に接続する config.json を作る
-cd infra && AWS_PROFILE=sakekasu-builder npx tsx scripts/write-web-config.ts ../web/public/config.json
+cd infra && AWS_PROFILE=<アプリ用のプロファイル> npx tsx scripts/write-web-config.ts ../web/public/config.json
 
 # フロントエンド（http://localhost:5173 は API の CORS と、共通ログインの戻り先に登録済み）
 cd web && npm run dev
