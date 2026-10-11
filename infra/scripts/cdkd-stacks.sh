@@ -49,28 +49,6 @@ has_cfn_stack() {
   exit 1
 }
 
-# cdkd import に渡す追加の引数。cdkd 0.291.16 の import の不具合を避ける
-#
-# - Cloud Control 経由で扱う AWS::Cognito::UserPoolClient は、識別子が "<UserPoolId>|<ClientId>" の組だが、
-#   CloudFormation から引いた物理 ID（ClientId だけ）をそのまま使って失敗する。組を --resource で渡す
-#   （--resource だけだと指定したものしか取り込まないので、残りを自動で解決させる --auto も付ける）
-import_args() {
-  local resources pools pool
-  resources="$(aws cloudformation describe-stack-resources --region "$2" --stack-name "$1" \
-    --query 'StackResources[].[LogicalResourceId,ResourceType,PhysicalResourceId]' --output text)"
-  pools="$(awk '$2 == "AWS::Cognito::UserPool" { print $3 }' <<<"$resources")"
-  if ! grep -q $'\tAWS::Cognito::UserPoolClient\t' <<<"$resources"; then
-    return
-  fi
-  if [[ "$(wc -l <<<"$pools")" -ne 1 || -z "$pools" ]]; then
-    echo "::error::$1 の UserPoolClient に対応する User Pool を 1 つに決められません" >&2
-    exit 1
-  fi
-  pool="$pools"
-  echo "--auto"
-  awk -v pool="$pool" '$2 == "AWS::Cognito::UserPoolClient" { print "--resource\n" $1 "=" pool "|" $3 }' <<<"$resources"
-}
-
 migrated=()
 for entry in "${stacks[@]}"; do
   stack="${entry%%:*}"
@@ -95,16 +73,11 @@ for entry in "${stacks[@]}"; do
     echo "== ${stack}: 未移行（main へのマージで CloudFormation から cdkd に取り込む）"
     continue
   fi
-  args="$(import_args "$stack" "$region")"
-  extra=()
-  if [[ -n "$args" ]]; then
-    mapfile -t extra <<<"$args"
-  fi
   # cdkd import は、スタックのリージョンではなく既定のリージョンで CloudFormation と各リソースを引くため、
-  # スタックごとに AWS_REGION を合わせる（us-east-1 の web スタックが取り込めない）
+  # スタックごとに AWS_REGION を合わせる（us-east-1 の web スタックが取り込めない。0.296.28 でも直っていない。#7）
   echo "== ${stack}: CloudFormation から cdkd へ移行する"
   AWS_REGION="$region" AWS_DEFAULT_REGION="$region" \
-    npx cdkd import "$stack" --migrate-from-cloudformation --yes "${extra[@]}"
+    npx cdkd import "$stack" --migrate-from-cloudformation --yes
 done
 
 if [[ "$mode" == preview && ${#migrated[@]} -gt 0 ]]; then
