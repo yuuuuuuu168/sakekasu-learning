@@ -64,7 +64,9 @@ export class BackendStack extends Stack {
     const logGroup = new logs.LogGroup(this, 'ApiFunctionLogs', {
       logGroupName: `/aws/lambda/sakekasu-learning-${envName}-api`,
       retention: logs.RetentionDays.ONE_MONTH,
-      removalPolicy: RemovalPolicy.DESTROY,
+      // RETAIN にしておく。DESTROY のままだと、名前を変えたときに cdkd が「ログが消える」として
+      // 作り直しを拒む（2026-10-11 のデプロイが止まった）。古いロググループは残り、保持期間で中身が消える
+      removalPolicy: RemovalPolicy.RETAIN,
     });
 
     const fn = new NodejsFunction(this, 'ApiFunction', {
