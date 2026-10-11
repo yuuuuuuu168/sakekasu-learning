@@ -19,6 +19,12 @@ export const OAUTH_SCOPES = ['openid', 'email', 'profile'];
  */
 export const PORTAL_SIGN_OUT_URL = 'https://sakekasu-builder.com/';
 
+/**
+ * 4 アプリの入口の一覧（ポータル）。ヘッダーの「アプリ一覧」の行き先。
+ * 共通ログインのセッションがあれば、入力なしで一覧が出る
+ */
+export const PORTAL_APPS_URL = 'https://sakekasu-builder.com/apps';
+
 /** 手元の開発サーバー（http://localhost:5173 など）か */
 function isLocalOrigin(origin: string): boolean {
   try {
