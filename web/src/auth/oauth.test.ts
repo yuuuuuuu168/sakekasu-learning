@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AUTO_SIGN_IN_KEY,
   OAUTH_SCOPES,
   PORTAL_SIGN_OUT_URL,
+  PORTAL_TOP_URL,
   amplifyAuthConfig,
+  callbackErrorMessage,
+  clearAutoSignInMark,
   consumeSsoHint,
-  createSsoAutoSignIn,
+  createSignInStarter,
   isOAuthCallback,
   redirectErrorMessage,
   signOutRedirectUrl,
@@ -63,6 +67,10 @@ describe('signOutRedirectUrl', () => {
   it('localhost を名前に含むだけのホストは本番扱いにする', () => {
     expect(signOutRedirectUrl('https://localhost.example.com')).toBe(PORTAL_SIGN_OUT_URL);
   });
+
+  it('サインイン画面の「入口へ」もポータルのトップ', () => {
+    expect(PORTAL_TOP_URL).toBe('https://sakekasu-builder.com/');
+  });
 });
 
 describe('isOAuthCallback', () => {
@@ -78,6 +86,23 @@ describe('isOAuthCallback', () => {
     expect(isOAuthCallback('')).toBe(false);
     expect(isOAuthCallback('?code=abc')).toBe(false);
     expect(isOAuthCallback('?q=1')).toBe(false);
+  });
+});
+
+describe('callbackErrorMessage', () => {
+  it('?error= 付きで戻ったら、画面に出す文を返す', () => {
+    expect(callbackErrorMessage('?error=access_denied&state=xyz')).toBe(
+      'ログインが取り消されました。もう一度ログインしてください',
+    );
+    expect(callbackErrorMessage('?error=server_error&error_description=x')).toBe(
+      'ログインに失敗しました。もう一度お試しください（OAuthSignInException）',
+    );
+  });
+
+  it('エラーが付いていなければ null', () => {
+    expect(callbackErrorMessage('')).toBeNull();
+    expect(callbackErrorMessage('?code=abc&state=xyz')).toBeNull();
+    expect(callbackErrorMessage('?error=')).toBeNull();
   });
 });
 
@@ -134,64 +159,106 @@ describe('stripSsoHint', () => {
 });
 
 describe('consumeSsoHint', () => {
-  it('目印を読んだら replaceState で URL から外す（history の state は保つ）', () => {
+  it('目印を replaceState で URL から外す（history の state は保つ）', () => {
     const { win, replaceState, href } = fakeWindow('/?sso=1&x=1#h');
-    expect(consumeSsoHint(win)).toBe(true);
+    consumeSsoHint(win);
     expect(replaceState).toHaveBeenCalledExactlyOnceWith({ idx: 0 }, '', '/?x=1#h');
     expect(href()).toBe('/?x=1#h');
   });
 
   it('目印が無ければ URL に触れない', () => {
     const { win, replaceState } = fakeWindow('/?x=1');
-    expect(consumeSsoHint(win)).toBe(false);
+    consumeSsoHint(win);
     expect(replaceState).not.toHaveBeenCalled();
   });
 });
 
-/**
- * AuthGate の最初の確認と同じ順で、目印の読み取り → ログイン状態の確認 → 自動の送り出しを行う。
- * 戻り値は自動で送り出したかどうか
- */
-function initialCheck(url: string, signedIn: boolean, error = false) {
-  const { win, href } = fakeWindow(url);
-  const signInWithRedirect = vi.fn();
-  const auto = createSsoAutoSignIn(consumeSsoHint(win), signInWithRedirect);
-  // StrictMode では最初の確認が 2 回走る
-  for (let i = 0; i < 2; i++) {
-    if (!signedIn) auto({ search: win.location.search, error });
-  }
-  return { signInWithRedirect, href: href() };
+/** sessionStorage の代わり。タブ（＝ストレージ）をまたいで同じものを渡せば、ページの読み直しを表せる */
+function fakeStorage() {
+  const items = new Map<string, string>();
+  return {
+    items,
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => void items.set(key, value),
+    removeItem: (key: string) => void items.delete(key),
+  };
 }
 
-describe('createSsoAutoSignIn', () => {
-  it('目印つきで未ログインなら、マネージドログインへ 1 回だけ自動で送り、URL から目印を外す', () => {
-    const { signInWithRedirect, href } = initialCheck('/?sso=1', false);
-    expect(signInWithRedirect).toHaveBeenCalledOnce();
-    expect(href).toBe('/');
+/**
+ * ページを 1 回開いたときの最初の確認。AuthGate と同じく、読み込みごとに starter を作り直す。
+ * StrictMode では確認が 2 回走るので auto も 2 回呼ぶ。戻り値は start が呼ばれた回数と auto の結果
+ */
+function openPage(storage: ReturnType<typeof fakeStorage> | null, search = '', error = false) {
+  const start = vi.fn(() => 'sent');
+  const starter = createSignInStarter(storage, start);
+  const results = [starter.auto({ search, error }), starter.auto({ search, error })];
+  return { start, results, starter };
+}
+
+describe('createSignInStarter', () => {
+  it('未ログインで開いたら、印を置いてマネージドログインへ 1 回だけ自動で進む', () => {
+    const storage = fakeStorage();
+    const { start, results } = openPage(storage);
+    expect(start).toHaveBeenCalledOnce();
+    // 2 回目の確認も「送っている最中」として同じ結果を返す（サインイン画面を一瞬出さない）
+    expect(results).toEqual(['sent', 'sent']);
+    expect(storage.items.get(AUTO_SIGN_IN_KEY)).toBe('1');
   });
 
-  it('目印が無ければ自動では送らない（ボタンを押してもらう）', () => {
-    expect(initialCheck('/', false).signInWithRedirect).not.toHaveBeenCalled();
-    expect(initialCheck('/?sso=0', false).signInWithRedirect).not.toHaveBeenCalled();
+  it('戻ってきてもまだ未ログインなら、2 回目は自動で進まずに画面を出す', () => {
+    const storage = fakeStorage();
+    openPage(storage);
+    const second = openPage(storage);
+    expect(second.start).not.toHaveBeenCalled();
+    expect(second.results).toEqual([null, null]);
   });
 
-  it('目印つきでもログイン済みなら送らず、URL から目印は外す', () => {
-    const { signInWithRedirect, href } = initialCheck('/exams/a/b?sso=1#q', true);
-    expect(signInWithRedirect).not.toHaveBeenCalled();
-    expect(href).toBe('/exams/a/b#q');
+  it('?error= 付きや認可コード付きで戻ったとき、エラーを出しているときは自動で進まない', () => {
+    expect(openPage(fakeStorage(), '?error=access_denied&state=xyz').start).not.toHaveBeenCalled();
+    expect(openPage(fakeStorage(), '?code=abc&state=xyz').start).not.toHaveBeenCalled();
+    expect(openPage(fakeStorage(), '', true).start).not.toHaveBeenCalled();
   });
 
-  it('マネージドログインからの戻りやエラーのときは送らない', () => {
-    expect(initialCheck('/?sso=1&code=abc&state=xyz', false).signInWithRedirect).not.toHaveBeenCalled();
-    expect(initialCheck('/?sso=1&error=access_denied', false).signInWithRedirect).not.toHaveBeenCalled();
-    expect(initialCheck('/?sso=1', false, true).signInWithRedirect).not.toHaveBeenCalled();
+  it('ログインできたら印を消すので、次に未ログインで開いたときはまた 1 回だけ自動で進む', () => {
+    const storage = fakeStorage();
+    openPage(storage);
+    clearAutoSignInMark(storage);
+    expect(storage.items.has(AUTO_SIGN_IN_KEY)).toBe(false);
+    expect(openPage(storage).start).toHaveBeenCalledOnce();
   });
 
-  it('一度見送ったら、その後に未ログインになっても送らない', () => {
-    const start = vi.fn();
-    const auto = createSsoAutoSignIn(true, start);
-    expect(auto({ search: '?code=abc&state=xyz', error: false })).toBe(false);
-    expect(auto({ search: '', error: false })).toBe(false);
+  it('新しいタブ（別の sessionStorage）ではまた 1 回だけ自動で進む', () => {
+    openPage(fakeStorage());
+    expect(openPage(fakeStorage()).start).toHaveBeenCalledOnce();
+  });
+
+  it('印を置けない（sessionStorage が使えない）ときは、往復しないよう自動では進まない', () => {
+    expect(openPage(null).start).not.toHaveBeenCalled();
+    const broken = {
+      ...fakeStorage(),
+      setItem: () => {
+        throw new Error('QuotaExceededError');
+      },
+    };
+    expect(openPage(broken).start).not.toHaveBeenCalled();
+    expect(() =>
+      clearAutoSignInMark({
+        ...broken,
+        removeItem: () => {
+          throw new Error('SecurityError');
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it('ボタンは印があっても必ず進む', () => {
+    const storage = fakeStorage();
+    openPage(storage);
+    const { starter, start } = openPage(storage);
     expect(start).not.toHaveBeenCalled();
+    expect(starter.manual()).toBe('sent');
+    expect(starter.manual()).toBe('sent');
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(openPage(null).starter.manual()).toBe('sent');
   });
 });

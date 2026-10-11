@@ -54,3 +54,160 @@ html {
 body {
   @apply antialiased;
 }
+
+/*
+ * サインイン画面（auth/AuthGate.tsx の SignInScreen）。自動でマネージドログインへ進めなかったときだけ出る。
+ * 見た目は sakekasu の入口の表紙（sakekasu-integrated_environment の infra/lib/portal.ts の top）と同じにする。
+ * OS がライトでもこの画面だけは黒に固定するので、共通テーマのダークの値（theme/sakekasu-theme.css）を
+ * .signin の中だけで --sk-* に入れ直す。ログイン後の画面には効かない。
+ */
+.signin {
+  color-scheme: dark;
+  --sk-bg: #1a1a2e;
+  --sk-surface: #22223a;
+  --sk-border: #3a3a58;
+  --sk-ink: #f2efe8;
+  --sk-muted: #9a97ab;
+  --sk-accent: #d4af37;
+  --sk-accent-ink: #1a1a2e;
+  --sk-gold-line: #b8964f;
+  --sk-focus: #d4af37;
+  --sk-danger: #ef8a82;
+  /* 青海波。地の色の円の間に、金の線（透明度 0x40）を 3 重に引く */
+  --signin-wave: radial-gradient(
+    circle at 50% 100%,
+    var(--sk-bg) 18%,
+    #b8964f40 19% 23%,
+    var(--sk-bg) 24% 40%,
+    #b8964f40 41% 45%,
+    var(--sk-bg) 46% 62%,
+    #b8964f40 63% 67%,
+    var(--sk-bg) 68% 70%,
+    transparent 71%
+  );
+
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  background: var(--sk-bg);
+  color: var(--sk-ink);
+  text-align: center;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'YuGothic', 'Meiryo', 'Noto Sans JP',
+    sans-serif;
+}
+/* 画面の外（iOS の引っぱりすぎた余白など）も黒にする。サインイン画面を出している間だけ */
+html:has(.signin) {
+  background: #1a1a2e;
+  color-scheme: dark;
+}
+/* 上の 42vh だけ青海波を敷き、下へ向けて透明にする */
+.signin::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 0;
+  height: 42vh;
+  background:
+    var(--signin-wave) 0 0 / 48px 24px,
+    var(--signin-wave) 24px 12px / 48px 24px;
+  -webkit-mask: linear-gradient(#000, transparent);
+  mask: linear-gradient(#000, transparent);
+}
+.signin > * {
+  position: relative;
+  z-index: 1;
+  animation: signin-up 0.8s ease-out both;
+}
+.signin > :nth-child(2) {
+  animation-delay: 0.1s;
+}
+.signin > :nth-child(3) {
+  animation-delay: 0.2s;
+}
+.signin > :nth-child(n + 4) {
+  animation-delay: 0.3s;
+}
+@keyframes signin-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .signin > * {
+    animation: none;
+  }
+}
+.signin-mark {
+  font-size: 3.5rem;
+  line-height: 1;
+}
+.signin-title {
+  margin: 0.5rem 0 0;
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', 'Noto Serif JP', serif;
+  font-size: 2.5rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+.signin-rule {
+  display: flex;
+  width: min(16rem, 70vw);
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  color: var(--sk-gold-line);
+}
+.signin-rule::before,
+.signin-rule::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--sk-gold-line);
+}
+.signin-lead {
+  margin: 0 0 2.5rem;
+  color: var(--sk-muted);
+  letter-spacing: 0.08em;
+}
+.signin-button {
+  padding: 1rem 2.5rem;
+  border-radius: 999px;
+  background: var(--sk-accent);
+  color: var(--sk-accent-ink);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  box-shadow: 0 6px 20px #0003;
+  cursor: pointer;
+}
+.signin-button:hover,
+.signin-button:focus-visible {
+  filter: brightness(1.1);
+}
+.signin-button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+.signin-error {
+  max-width: 20rem;
+  margin: 1rem 0 0;
+  font-size: 0.85rem;
+  color: var(--sk-danger);
+}
+.signin-note {
+  margin: 0.75rem 0 2.5rem;
+  font-size: 0.8rem;
+  color: var(--sk-muted);
+}
+.signin-back {
+  margin-top: 2rem;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--sk-border);
+  font-size: 0.85rem;
+  color: var(--sk-muted);
+  text-decoration: none;
+}

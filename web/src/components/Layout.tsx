@@ -1,6 +1,7 @@
 import { GraduationCap, LogOut } from 'lucide-react';
 import { Link, Outlet } from 'react-router';
 import { useAuth } from '../auth/AuthGate';
+import { AppsLink } from './AppsLink';
 
 export function Layout() {
   const { signOut } = useAuth();
@@ -14,9 +15,11 @@ export function Layout() {
             </span>
             sakekasu learning
           </Link>
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-1 sm:gap-3">
+            <AppsLink />
             <button
               onClick={() => void signOut()}
+              aria-label="ログアウト"
               className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-ink-2 hover:bg-surface-2"
             >
               <LogOut className="size-4" />
