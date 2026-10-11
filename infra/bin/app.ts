@@ -3,6 +3,7 @@ import { AgentStack } from '../lib/agent-stack';
 import { parseAnthropicFederation } from '../lib/anthropic-federation';
 import { BackendStack } from '../lib/backend-stack';
 import { GithubOidcStack } from '../lib/github-oidc-stack';
+import { applyRoleBoundary } from '../lib/role-boundary';
 import { parseSharedAuth } from '../lib/shared-auth';
 import { WebStack } from '../lib/web-stack';
 
@@ -76,4 +77,10 @@ if (app.node.tryGetContext('github-oidc') === 'true') {
     backendRegion: region,
     authDomain: sharedAuth.domain,
   });
+
+  // アプリのロールはすべて Permissions Boundary の内側に置く（理由は lib/role-boundary.ts）。
+  // 境界は github-oidc のスタックが作り、cdkd 用ロールは境界の無いロールを作れない
+  for (const stack of app.node.children) {
+    if (stack instanceof cdk.Stack) applyRoleBoundary(stack);
+  }
 }
