@@ -7,12 +7,18 @@
  * 戻ってきたら Amplify が認可コードをトークンに換えるのを待つだけ。
  *
  * ログイン中のユーザー名やメールアドレスは画面に出さない。
+ *
+ * 未ログインでもマネージドログインへは勝手に送らず、ログインボタンを押してもらうのが原則
+ * （送り出しと戻りで行き来し続けないため）。例外はポータル（https://sakekasu-builder.com/apps）から
+ * `?sso=1` 付きで来たときだけ。共通ログインでログインした直後なので、送ればそのまま認可コードが返ってくる。
+ * このときはボタンを出さずに 1 回だけ自動で送る。目印は読み込み時に URL から外し、戻り先も素の / なので、
+ * 戻ってきた後に再び自動で送ることはない。
  */
 import { Hub } from 'aws-amplify/utils';
 import { getCurrentUser, signInWithRedirect, signOut } from 'aws-amplify/auth';
 import { GraduationCap, LoaderCircle, LogIn } from 'lucide-react';
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { isOAuthCallback, redirectErrorMessage } from './oauth';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { consumeSsoHint, createSsoAutoSignIn, isOAuthCallback, redirectErrorMessage } from './oauth';
 
 interface AuthContextValue {
   signOut: () => Promise<void>;
@@ -31,17 +37,55 @@ type Status = 'checking' | 'signedOut' | 'signedIn';
 /** マネージドログインから戻った後、トークンの交換を待つ上限 */
 const CALLBACK_TIMEOUT_MS = 15_000;
 
+/**
+ * ポータルからの目印（?sso=1）。読み込み時に 1 度だけ読み、ログイン済みかどうかに関係なく URL から外す。
+ * マネージドログインへ送る前に外れているので、目印つきの URL で往復することはない
+ */
+const ssoHint = consumeSsoHint(window);
+
+/**
+ * マネージドログインへ送る（成功するとページごと移る）。送れなかったときは画面に出す文を返す。
+ * ボタンと、目印つきで来たときの自動の送り出しで共通
+ */
+async function redirectToSignIn(): Promise<string | null> {
+  try {
+    await signInWithRedirect();
+    return null;
+  } catch (err) {
+    // 別のタブでログイン済みなど。状態を読み直せば中に入れる
+    if ((err as { name?: string })?.name === 'UserAlreadyAuthenticatedException') {
+      window.location.reload();
+      return null;
+    }
+    return redirectErrorMessage(err);
+  }
+}
+
 export function AuthGate({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('checking');
   const [error, setError] = useState<string | null>(null);
+  const failed = useRef(false);
+  // 目印つきで来て最初の確認で未ログインなら、ボタンの代わりに 1 回だけ自動で送る。
+  // 送っている間は 'checking' のまま（読み込み中の表示）にして、ボタンを一瞬見せない
+  const autoSignIn = useRef<ReturnType<typeof createSsoAutoSignIn> | null>(null);
+  autoSignIn.current ??= createSsoAutoSignIn(ssoHint, () => {
+    void redirectToSignIn().then((message) => {
+      if (message === null) return;
+      setError(message);
+      setStatus('signedOut');
+    });
+  });
 
   const refresh = useCallback(async () => {
     try {
       await getCurrentUser();
       setStatus('signedIn');
     } catch {
+      const search = window.location.search;
+      // 目印つきで来たときの例外。マネージドログインからの戻りやエラーのときは送らない
+      if (autoSignIn.current?.({ search, error: failed.current })) return;
       // マネージドログインから戻った直後は、トークンの交換が終わるまで Hub の知らせを待つ
-      if (isOAuthCallback(window.location.search)) return;
+      if (isOAuthCallback(search)) return;
       setStatus('signedOut');
     }
   }, []);
@@ -56,6 +100,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
           return;
         case 'signInWithRedirect_failure':
           console.error('共通ログインからの戻りでエラーが発生しました', payload.data);
+          failed.current = true;
           setError(redirectErrorMessage(payload.data?.error ?? payload.data));
           setStatus('signedOut');
           return;
@@ -101,18 +146,11 @@ function SignInScreen({ error }: { error: string | null }) {
   const handleSignIn = async () => {
     setBusy(true);
     setMessage(null);
-    try {
-      // 成功するとマネージドログインへページごと移る
-      await signInWithRedirect();
-    } catch (err) {
-      // 別のタブでログイン済みなど。状態を読み直せば中に入れる
-      if ((err as { name?: string })?.name === 'UserAlreadyAuthenticatedException') {
-        window.location.reload();
-        return;
-      }
-      setMessage(redirectErrorMessage(err));
-      setBusy(false);
-    }
+    // 成功するとマネージドログインへページごと移るので、busy のままにしておく
+    const failure = await redirectToSignIn();
+    if (failure === null) return;
+    setMessage(failure);
+    setBusy(false);
   };
 
   return (
