@@ -4,7 +4,7 @@
 
 - 招待制のログイン（4 アプリ共通のログイン `auth.sakekasu-builder.com`。Cognito のマネージドログイン）。MFA 必須（認証アプリの TOTP）。回答履歴をユーザーごとに記録し、直近2回の正誤で習熟度を判定する
 - 問題文はそのまま、選択肢は毎回シャッフルして出題する。解説は回答後に折りたたみで表示する
-- 問題ごとに AI（Claude Sonnet）に相談できる。AWS 公式ドキュメントを MCP で参照しながら答える
+- 問題ごとに AI（Bedrock の Kimi K3）に相談できる。AWS 公式ドキュメントを MCP で参照しながら答える
 - AI への相談は 1 人あたり 1 日 50 回まで（日本時間の 0 時に戻る）。Bedrock の費用がかさまないよう、モデルを呼ぶ前に DynamoDB で数える（`agent/src/quota.py`）
 
 ## 習熟度の判定
@@ -20,16 +20,10 @@
 
 ## 構成
 
-```
-ブラウザ ──> CloudFront (us-east-1, OAC) ──> S3 (静的サイト)
-   │
-   ├──> 共通ログイン（Cognito マネージドログイン。認可コード + PKCE）
-   ├──> API Gateway HTTP API (JWT) ──> Lambda ──> DynamoDB（回答履歴）
-   │                                        └──> S3（問題データ・非公開）
-   └──> AgentCore Runtime (JWT, Strands) ──> Bedrock (Claude Sonnet)
-                                         ├──> S3（問題データ・非公開）
-                                         └──> AWS Knowledge MCP（公式ドキュメント検索）
-```
+![構成図](docs/architecture.drawio.svg)
+
+[docs/architecture.drawio.svg](docs/architecture.drawio.svg) は draw.io（VS Code の Draw.io 拡張でも可）でそのまま開いて編集できる。
+アカウント ID は図に書かない。
 
 - すべてサーバーレス。固定費はほぼゼロで、ランニングコストの大半は Bedrock の利用料になる
 - 正解と解説は回答を送信するまで API が返さない。採点もサーバーで行う
@@ -39,16 +33,16 @@
 | スタック | リージョン | 内容 |
 |---|---|---|
 | `sakekasu-learning-dev-backend` | ap-northeast-1 | DynamoDB、問題データ用 S3、HTTP API + Lambda |
-| `sakekasu-learning-dev-agent` | ap-northeast-1 | AgentCore Runtime（Python 3.13, CodeZip） |
+| `sakekasu-learning-dev-agent` | ap-northeast-1 | AgentCore Runtime（Python 3.13, CodeZip）、AI 相談の回数を数える DynamoDB |
 | `sakekasu-learning-dev-web` | us-east-1 | ACM、S3、CloudFront、Route 53 レコード |
 | `sakekasu-learning-github-oidc` | ap-northeast-1 | GitHub Actions 用ロール（手動デプロイ） |
 
 ログインの接続先（共通ユーザープールの ID、learning 用のクライアント ID、ログイン画面のドメイン）は
 `infra/cdk.json` の context `sharedAuth` に置く。共通基盤（sakekasu-integrated_environment）のスタックとは参照でつながない。
-切り替えの経緯と、旧ユーザープール（以前の auth スタック）を片付ける手順は [docs/shared-login.md](docs/shared-login.md) にある。
+切り替えの経緯は [docs/shared-login.md](docs/shared-login.md) にある。
 
 github-oidc 以外のスタックは [cdkd](https://github.com/go-to-k/cdkd) でデプロイする。CloudFormation を通さず各サービスの API を直接呼ぶので速い。
-スタックの状態（リソースの対応表と出力）は CloudFormation ではなく S3 の `cdkd-state-232791540685` に置かれる。
+スタックの状態（リソースの対応表と出力）は CloudFormation ではなく S3 の `cdkd-state-<アカウント ID>` に置かれる。
 github-oidc だけは CI 自身の権限を定義するため、手元から `cdk deploy`（CloudFormation）でデプロイする。
 
 ## 監視
@@ -56,7 +50,7 @@ github-oidc だけは CI 自身の権限を定義するため、手元から `cd
 アラームは backend と agent のスタックが持ち、共通基盤（sakekasu-integrated_environment）の SNS トピック
 `sakekasu-integrated-alerts` へ ALARM と OK の両方を送る。共通基盤がそれを Slack に流す。
 対象は API の Lambda（エラー・スロットリング）、HTTP API の 5xx、回答履歴の DynamoDB のスロットリング、
-AI チャットの Runtime（システムエラー・スロットリング・認可失敗）。アラーム一覧と閾値は
+AI チャットの Runtime（システムエラー・スロットリング・認可失敗・呼び出し回数の急増）。アラーム一覧と閾値は
 [docs/monitoring.md](docs/monitoring.md)、送り方の約束は共通基盤の
 [docs/monitoring.md](https://github.com/yuuuuuuu168/sakekasu-integrated_environment/blob/main/docs/monitoring.md) にある。
 
@@ -107,42 +101,13 @@ agent/     AI 家庭教師（Strands Agents / AgentCore Runtime）
 
 ## 初回セットアップ
 
-前提: sakekasu-builder と同じアカウント（232791540685）で、CDK のブートストラップが ap-northeast-1 で済んでいること（github-oidc スタック用）。
+前提: sakekasu-builder と同じアカウントで、CDK のブートストラップが ap-northeast-1 で済んでいること（github-oidc スタック用）。
 
 ### 1. DNS（サブドメインの委任）
 
-`sakekasu-builder.com` の権威ゾーンは管理アカウント（<管理アカウント ID>）にある。sakekasu-kakeibo と同じく、
-このアカウントに `learning.sakekasu-builder.com` のゾーンを作り、親ゾーンから NS で委任する。
-
-```bash
-# 232791540685 にサブドメインのゾーンを作る（出力のゾーン ID と NS を控える）
-AWS_PROFILE=sakekasu-builder aws route53 create-hosted-zone \
-  --name learning.sakekasu-builder.com --caller-reference sakekasu-learning-$(date +%Y%m%d) \
-  --hosted-zone-config '{"Comment":"sakekasu-learning delivery zone - delegated from parent"}' \
-  --query "[HostedZone.Id,DelegationSet.NameServers]"
-
-# 管理アカウントの親ゾーン（Z0378029DKDVAJ2VE475）に NS レコードを足す
-AWS_PROFILE=yuuuuuuuki7749 aws route53 change-resource-record-sets \
-  --hosted-zone-id Z0378029DKDVAJ2VE475 --change-batch file://ns-delegation.json
-```
-
-`ns-delegation.json` の例（NS は上で控えた4つ）:
-
-```json
-{
-  "Changes": [{
-    "Action": "UPSERT",
-    "ResourceRecordSet": {
-      "Name": "learning.sakekasu-builder.com",
-      "Type": "NS",
-      "TTL": 3600,
-      "ResourceRecords": [{ "Value": "ns-xxx.awsdns-xx.org" }, { "Value": "..." }, { "Value": "..." }, { "Value": "..." }]
-    }
-  }]
-}
-```
-
-最後に、控えたゾーン ID（`Z` から始まる部分）を `infra/cdk.json` の `hostedZoneId` に入れてコミットする。
+`learning.sakekasu-builder.com` のゾーンはこのアカウントにあり、管理アカウントにある親ゾーン `sakekasu-builder.com` から
+NS で委任済み。ゾーン ID は `infra/cdk.json` の `hostedZoneId` に入っている。作り直すときは、ゾーンを作って NS を親ゾーンに足し、
+ゾーン ID を `hostedZoneId` に入れる。
 
 ### 2. GitHub Actions 用ロールと cdkd の準備（CI 自身の権限なので手動）
 
@@ -154,40 +119,19 @@ bash scripts/setup-cdkd.sh   # AWS_PROFILE は既定で sakekasu-builder
 GitHub Actions 用ロール（github-oidc スタック）をデプロイし、`cdkd bootstrap` で状態を置くバケットを作る。
 その後 main に push すると deploy ワークフローが全スタックと問題データ・フロントエンドをデプロイする。
 
-CloudFormation（`cdk deploy`）でデプロイ済みのスタックがあるときは、先に手元で cdkd へ移す
-（dev 環境は移行済み）。全リソースを Retain にしてから CloudFormation のスタックを消すので、
-回答履歴などのデータはそのまま残る。
-
-```bash
-cd infra && AWS_PROFILE=sakekasu-builder bash scripts/cdkd-stacks.sh migrate
-```
-
 ### Bedrock のモデル
 
 既定は Kimi K3（`global.moonshotai.kimi-k3`、東京からは Global プロファイルのみ）で、予備のモデルは置かない。
 `infra/cdk.json` の context の `agentModelId` / `agentFallbackModelId` で変更できる。
 予備を設定すると、応答を返し始める前に失敗したときだけ予備のモデルで答え直す。
 
-Sonnet 5 / Opus 5.5 などの新しいモデルは、契約済みでもアカウント単位のアクセス制限で
-`AccessDeniedException: ... is not available for this account` になることがある（2026-09 時点のサポート回答。
-基準は非公開で、利用実績を積むと自動で緩和される）。クォータが 0 でなくても制限されることがある。
-
-Bedrock の Anthropic の新しいモデルは、モデルごとに利用契約も必要。
-
-```bash
-M=anthropic.claude-sonnet-5
-T=$(AWS_PROFILE=sakekasu-builder aws bedrock list-foundation-model-agreement-offers --model-id $M --query 'offers[0].offerToken' --output text)
-AWS_PROFILE=sakekasu-builder aws bedrock create-foundation-model-agreement --model-id $M --offer-token "$T"
-AWS_PROFILE=sakekasu-builder aws bedrock get-foundation-model-availability --model-id $M   # agreementAvailability が AVAILABLE になれば利用可
-```
+Anthropic のモデルに替えるときは、モデルごとの利用契約（`aws bedrock create-foundation-model-agreement`）が要る。
 
 ## ユーザーの招待
 
 ユーザーはこのリポジトリではなく、共通ログインのユーザープールに作る
 （sakekasu-integrated_environment の `docs/identity.md` の「ユーザーを作る」）。セルフサインアップは無い。
 初回ログインでは、マネージドログインの画面でパスワードの変更と認証アプリ（Google Authenticator など）の登録を求められる。
-
-このアプリ専用のユーザープール（以前の auth スタック）は外したので、そちらにはユーザーを作らない。
 
 ## ローカル開発
 
@@ -215,6 +159,7 @@ cd web && npm run dev
 | `test.yml` | PR / main | 問題データがこのリポジトリに無いことの確認、問題の形式チェック、infra / web / agent のテスト |
 | `cdkd-diff.yml` | PR（infra・agent） | `cdkd diff` を PR にコメント |
 | `deploy.yml` | main / content リポジトリの main | cdkd deploy → 問題データ同期 → フロント同期 → キャッシュ削除 |
+| `claude-hooks.yml` | PR / main（scripts・.claude） | Claude Code のフックとスクリプトのテスト |
 
 AWS へは GitHub OIDC で入る。deploy ロールは main ブランチからだけ、diff ロールは PR からだけ引き受けられる。
 OIDC トークンを取れるのは、AWS を操作するジョブだけにしている。テスト・ビルド・`cdk synth` は権限の無い別のジョブで済ませ、
@@ -222,3 +167,9 @@ OIDC トークンを取れるのは、AWS を操作するジョブだけにし�
 サードパーティのアクションはコミット SHA で固定している。
 cdkd は deploy ロールから `sakekasu-learning-cdkd-deploy`（管理者権限。CDK の cfn-exec ロールに当たる）に切り替えてデプロイする。
 diff ロールが読めるのは、このアプリの cdkd の状態（S3）だけ。AWS のリソースやデータは読めない。
+
+## Claude Code（クラウド環境）
+
+claude.ai/code のクラウドセッションで開発する。セッションは GitHub へ push と PR 作成まで行い、マージは人が行う。
+AWS へは読み取り専用の SSO（`verify` / `verify-org` / `verify-ops`）だけで入り、変更操作は `PreToolUse` フックでも止める。
+フック・MCP・環境の作り方は [docs/claude-code-web.md](docs/claude-code-web.md)、運用ルールは [CLAUDE.md](CLAUDE.md) にある。

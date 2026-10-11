@@ -16,7 +16,7 @@ iPhone のブラウザ／Claude アプリからタスクを投げ、「タスク
 ## 依存インストールの自動実行（リポジトリ側・設定済み）
 
 - [.claude/settings.json](../.claude/settings.json) の SessionStart フックが、セッション開始・再開のたびに [scripts/cloud-setup.sh](../scripts/cloud-setup.sh) を実行する
-- スクリプトは `NPM_DIRS` に並べたディレクトリ（既定は `.` と `infra`、`package-lock.json` が無いものは飛ばす）の `npm ci` を行う。インストール時に `package-lock.json` のハッシュを `node_modules/.package-lock.sha256` に控えておき、一致する（＝依存が変わっていない）ときだけスキップして高速起動する。ロックファイルだけ更新されたブランチでも古い依存のまま動くことはない
+- スクリプトは `NPM_DIRS` に並べたディレクトリ（既定は `web` と `infra`、`package-lock.json` が無いものは飛ばす）の `npm ci` を行う。インストール時に `package-lock.json` のハッシュを `node_modules/.package-lock.sha256` に控えておき、一致する（＝依存が変わっていない）ときだけスキップして高速起動する。ロックファイルだけ更新されたブランチでも古い依存のまま動くことはない
 - 最後に運用方針（AWS 認証の取り方、PR の watch）を標準出力に出す。SessionStart フックの標準出力はそのままセッションの文脈に入るので、毎セッションの先頭に必ず載る。同じ内容は [CLAUDE.md](../CLAUDE.md) にも書いてあるが、そちらは長いセッションでは押し流されるため二重に置いている
 - `$CLAUDE_CODE_REMOTE` がクラウド VM でだけ `true` になるため、ローカルの Claude Code セッションでは何もしない
 
