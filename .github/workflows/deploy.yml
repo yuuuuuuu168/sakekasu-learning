@@ -11,8 +11,6 @@
 #   7. CloudFront のキャッシュを削除
 #
 # ジョブを分けるのは、テストやビルドで動く依存のコードに OIDC トークンを取らせないため。
-# id-token: write のジョブでは全ステップに ACTIONS_ID_TOKEN_REQUEST_* が入り、乗っ取られた依存が
-# 自分でトークンを取って deploy ロールを引き受けられる（--ignore-scripts はインストール時しか止めない）。
 # deploy ジョブで動く依存は cdkd と、config.json を作る tsx のスクリプトだけにしている。
 name: deploy
 
