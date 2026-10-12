@@ -71,12 +71,9 @@ Secrets を登録する前に 3 をマージすると、deploy は問題デー�
 
 ## 履歴から消す（public にする前に必ず行う）
 
-> **このリポジトリでは実施済み。** 2026-10-05 に問題データとメールアドレスを、2026-10-11 にコミットの作者名を、
-> 2026-10-12 に管理アカウント・運用アカウントの ID と Identity Center の開始 URL を全履歴から取り除き、
-> その都度リポジトリを作り直した（前のものは private の `sakekasu-learning-archive`・`sakekasu-learning-archive2`・
-> `sakekasu-learning-archive3` に改名して残してある）。以下は、同じことをもう一度行うときの手順。
+> **このリポジトリでは実施済み。** 以下は、同じことをもう一度行うときの手順。
 
-ファイルを消しても、過去のコミットには問題データが残る（初回コミット d5116cf から c6392d8 まで）。
+ファイルを消しても、過去のコミットには問題データが残る。
 public にする前に、すべてのブランチとタグの履歴から `content/aws/` を取り除く。
 
 GitHub では、PR の参照（`refs/pull/*`）が書き換え前のコミットを指したまま残り、利用者が消せない。
@@ -107,7 +104,7 @@ git push --mirror git@github.com:yuuuuuuu168/sakekasu-learning-public.git
 
 - OIDC ロールの信頼先: `infra/bin/app.ts` の `subjectPrefix` の末尾（`@<リポジトリ ID>`）を新しい ID に変え、
   `sakekasu-learning-github-oidc` を手元から `cdk deploy` する。ID は `gh api repos/yuuuuuuu168/sakekasu-learning --jq .id` で引ける
-- GitHub Actions の Secrets（`QUESTIONS_DEPLOY_KEY`。上の 1 で作り直し、content 側の deploy key も入れ替える）と Environments
+- GitHub Actions の Secrets（`QUESTIONS_DEPLOY_KEY`。「初期設定」の 1 の手順で作り直し、content 側の deploy key も入れ替える）と Environments
 - content 側の `APP_REPO_TOKEN`: PAT の Repository access で `sakekasu-learning` を選び直す（PAT もリポジトリ ID で紐付く）
 - AWS Security Agent: エージェントスペースでリポジトリを削除して追加し直す
 - Issue: `gh issue transfer <番号> yuuuuuuu168/sakekasu-learning --repo <改名した前のリポジトリ>` で番号順に移し、

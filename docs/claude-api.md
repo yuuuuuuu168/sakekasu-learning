@@ -1,8 +1,7 @@
 # Claude API の ID 連携（AI チャット）
 
 AI チャットは Claude API（`api.anthropic.com`）の Claude Haiku 5.5 を既定にし、答えられなかったら
-Bedrock の Kimi K3 で答え直す（`agent/src/llm.py`、`agent/src/main.py`）。Max プランに付く月々の
-API クレジットで払えるので、単純に課金される Bedrock より安い。
+Bedrock の Kimi K3 で答え直す（`agent/src/llm.py`、`agent/src/main.py`）。
 
 Claude API には API キーではなく
 [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/wif-providers/aws) で入る。
@@ -16,8 +15,7 @@ sakekasu-kakeibo の OCR と同じ方式（あちらの docs/operations.md「Cla
 dev については 2026-10-11 に済んでいる（ID は `infra/cdk.json` の context `anthropicFederation`）。
 
 1. AWS: IAM → アカウント設定 → **Outbound web identity federation** を有効にする。
-   アカウント 232791540685 では kakeibo のときに有効にしてある（2026-10-11 に確認。発行者は
-   `https://a15e92fb-70a4-49b6-a827-c01e4ed2a0ae.tokens.sts.global.api.aws`）。
+   アプリのアカウントでは有効にしてある（2026-10-11 に確認）。
    `sts:GetWebIdentityToken` を許したロールしかトークンを取れないので、ほかのアプリには影響しない
 2. Claude Console: ワークスペース `sakekasu-learning` を作る（使用量・コスト・利用上限をアプリ別に分ける）
 3. Claude Console: Settings → Workload identity で、上の発行者に次を足す
@@ -28,8 +26,7 @@ dev については 2026-10-11 に済んでいる（ID は `infra/cdk.json` の 
    `sakekasu-learning` に役割 Developer で入れる。これを忘れるとトークンの交換が 401 になり、
    認証履歴に `sa_not_in_workspace` が出る（kakeibo で一度踏んだ）
 5. （任意）Claude Console: ワークスペース `sakekasu-learning` に利用上限（spend limit）をかける。
-   dev ではかけていない。相談はアプリ側で 1 人 1 日 50 回までに絞ってあり、クレジットを使い切ると
-   Bedrock に回る（自動チャージを有効にしていると課金に回るので、Billing の設定も見ておく）
+   自動チャージを有効にしているときは、Billing の設定も見ておく
 6. `infra/cdk.json` の context に ID を書いて PR にする（どれも秘密ではない）
 
    ```json
@@ -44,13 +41,7 @@ dev については 2026-10-11 に済んでいる（ID は `infra/cdk.json` の 
    `workspaceId` は省かずに書く。ルールが複数のワークスペースを認可していると、省いたときに
    どちらへ入るかがサーバー側の判断になる。
 
-同じ Claude の組織を kakeibo・builder も使うので、ワークスペース・ルール・サービスアカウントはアプリごとに分けてある。
-
-| アプリ | ルール | サービスアカウント | ワークスペース |
-| --- | --- | --- | --- |
-| learning | `sakekasu-learning-workload` | `sakekasu-learning-chat` | `sakekasu-learning` |
-| kakeibo | `sakekasu-kakeibo-workload` | `sakekasu-kakeibo-ocr` | `sakekasu-kakeibo` |
-| builder | `sakekasu-builder-workload` | `sakekasu-builder` | `sakekasu-builder` |
+同じ Claude の組織をほかのアプリも使うので、ワークスペース・ルール・サービスアカウントはアプリごとに分けてある。
 
 context が無いあいだは、AI チャットは Bedrock（Kimi K3）だけで答える（`LLM_PROVIDER=bedrock`）。
 context を消せばいつでもその状態に戻せる。
@@ -101,7 +92,7 @@ Claude API で答えられず Bedrock に回したときは `[chat] fallback {"f
 
 | `errorType` | 疑うところ |
 | --- | --- |
-| `credit_balance` | Claude Console のクレジット（月が替われば戻る。急ぐなら Billing を見る） |
+| `credit_balance` | Claude Console のクレジットと Billing |
 | `authentication` / `permission` | Claude Console のルール（ロールの ARN・audience・ワークスペース）。[認証履歴](https://platform.claude.com/settings/workload-identity-federation?tab=history)に拒否の理由が出る |
 | `credentials` | メッセージが `Token exchange failed with status 401` なら、JWT は取れていて Anthropic 側で断られている。認証履歴の `status.reason` を見る（`sa_not_in_workspace` ならサービスアカウントをワークスペースに入れる）。それ以外は STS で JWT を取れていない（Outbound web identity federation が無効、ロールの権限の条件と頼み方が合わない、など） |
 | `rate_limit` / `overloaded` / `server_error` / `timeout` / `connection` | Claude API 側の混雑や障害。続かなければ放っておいてよい |

@@ -1,11 +1,11 @@
 # sakekasu learning
 
-資格試験（AWS / OCI / Terraform ...）の問題演習サイト。<https://learning.sakekasu-builder.com/>
+資格試験（AWS / Terraform）の問題演習サイト。<https://learning.sakekasu-builder.com/>
 
 - 招待制のログイン（4 アプリ共通のログイン `auth.sakekasu-builder.com`。Cognito のマネージドログイン）。MFA 必須（認証アプリの TOTP）。回答履歴をユーザーごとに記録し、直近2回の正誤で習熟度を判定する
 - 問題文はそのまま、選択肢は毎回シャッフルして出題する。解説は回答後に折りたたみで表示する
 - 問題ごとに AI（Claude API の Claude Haiku 5.5。使えないときは Bedrock の Kimi K3）に相談できる。AWS 公式ドキュメントを MCP で参照しながら答える
-- AI への相談は 1 人あたり 1 日 50 回まで（日本時間の 0 時に戻る）。モデルの費用がかさまないよう、モデルを呼ぶ前に DynamoDB で数える（`agent/src/quota.py`）
+- AI への相談は 1 人あたりの 1 日の回数に上限がある。モデルを呼ぶ前に DynamoDB で数える（`agent/src/quota.py`）
 
 ## 習熟度の判定
 
@@ -26,7 +26,7 @@
 アイコンは [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/)（2026-01-30 版）を図の中に埋め込んである。
 アカウント ID は図に書かない。
 
-- すべてサーバーレス。固定費はほぼゼロ。AI チャットは Max プランに付く月々の Claude API クレジットで払い、Bedrock の利用料は控えに回ったときだけかかる
+- すべてサーバーレス。固定費はほぼゼロ
 - 正解と解説は回答を送信するまで API が返さない。採点もサーバーで行う
 - AI チャットは問題の本文・正解・解説をクライアントから受け取らず、Runtime が非公開バケットから読む
 - CloudFront の証明書は us-east-1 にしか置けないため、配信スタックだけ us-east-1。フロントは起動時に `/config.json` を読んで接続先を知るので、リージョンをまたいだスタック参照は無い
@@ -156,7 +156,7 @@ git clone git@github.com:yuuuuuuu168/sakekasu-learning-content.git content
 # デプロイ済みの dev 環境に接続する config.json を作る
 cd infra && AWS_PROFILE=<アプリ用のプロファイル> npx tsx scripts/write-web-config.ts ../web/public/config.json
 
-# フロントエンド（http://localhost:5173 は API の CORS と、共通ログインの戻り先に登録済み）
+# フロントエンド（http://localhost:5173）
 cd web && npm run dev
 
 # テスト
@@ -176,7 +176,7 @@ AWS へは GitHub OIDC で入る。deploy ロールは main ブランチから�
 OIDC トークンを取れるのは、AWS を操作するジョブだけにしている。テスト・ビルド・`cdk synth` は権限の無い別のジョブで済ませ、
 成果物（合成済みの `cdk.out` など）を artifact で渡す。AWS を操作するジョブで動く依存は cdkd（と config.json を作る tsx）だけになる。
 サードパーティのアクションはコミット SHA で固定している。
-cdkd は deploy ロールから `sakekasu-learning-cdkd-deploy`（管理者権限。CDK の cfn-exec ロールに当たる）に切り替えてデプロイする。
+cdkd は deploy ロールからデプロイ用のロールに切り替えてデプロイする。
 diff ロールが読めるのは、このアプリの cdkd の状態（S3）だけ。AWS のリソースやデータは読めない。
 
 ## Claude Code（クラウド環境）

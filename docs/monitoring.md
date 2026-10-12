@@ -16,9 +16,8 @@
   共通基盤のスタックの出力は参照しない
 - アラームは監視するリソースと同じスタックに置く。スタックの間の参照を増やさないため
 - トピックポリシーは共通基盤の側で CloudWatch からの publish を許している。こちらで SNS の権限は足さない。
-  cdkd 用ロール（`sakekasu-learning-cdkd-deploy`）は AdministratorAccess なので、アラームの作成に追加の権限は要らない
-- web スタック（us-east-1）にはアラームを置かない。トピックと別のリージョンから届くかは確かめられておらず、
-  サイトの死活は共通基盤の外形監視が見ている
+  アラームの作成のために cdkd 用ロールへ権限を足す必要もない
+- web スタック（us-east-1）にはアラームを置かない。サイトの死活は共通基盤の外形監視が見ている
 
 ## アラーム一覧
 
@@ -44,8 +43,7 @@ treatMissingData はすべて `NOT_BREACHING`（起きたときだけ値が出�
   起動時の失敗だけで、ふつうの失敗は HTTP API の 5xx に出る。5xx は一時的な 1 回で鳴らさないよう 3 回から
 - DynamoDB の ThrottledRequests は Operation のディメンションつきでしか出ないため、テーブル単位で出る
   Read/WriteThrottleEvents を足して見る
-- `agent-invocations-high` は費用の見張り。Runtime はブラウザから直接呼ばれ、API のスロットリングが効かない。
-  1 人あたりの上限（1 日 50 回。agent/src/quota.py）で断った相談も呼び出しとして数えるので、
+- `agent-invocations-high` は費用の見張り。1 人あたりの上限（agent/src/quota.py）で断った相談も呼び出しとして数えるので、
   1 人が上限を短時間で使い切る動きや、利用者の急増に気づける
 - AgentCore の指標のディメンションは ResourceId（Runtime の ARN）。認可失敗はさらに ExceptionType で分かれる。
   共通ログインへ移った直後なので、allowedClients の取り違えなどで全員がはじかれる事故を拾うために入れている。
