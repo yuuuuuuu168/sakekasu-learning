@@ -24,8 +24,16 @@ export async function accessToken(): Promise<string> {
   return token;
 }
 
+/**
+ * API の呼び先。手元の開発サーバーでは同じオリジンの /api を呼び、vite.config.ts の中継で
+ * デプロイ済みの API に届ける（本番の API の CORS は手元のオリジンを許していない）
+ */
+function apiBase(): string {
+  return import.meta.env.DEV ? '/api' : config().apiUrl;
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${config().apiUrl}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${await accessToken()}`,

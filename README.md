@@ -156,7 +156,7 @@ git clone git@github.com:yuuuuuuu168/sakekasu-learning-content.git content
 # デプロイ済みの dev 環境に接続する config.json を作る
 cd infra && AWS_PROFILE=<アプリ用のプロファイル> npx tsx scripts/write-web-config.ts ../web/public/config.json
 
-# フロントエンド（http://localhost:5173）
+# フロントエンド（http://localhost:5173）。API へは開発サーバーが /api を中継する（web/vite.config.ts）
 cd web && npm run dev
 
 # テスト

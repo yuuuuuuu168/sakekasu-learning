@@ -54,7 +54,8 @@ if (app.node.tryGetContext('github-oidc') === 'true') {
     env,
     envName,
     sharedAuth,
-    allowedOrigins: [siteUrl, 'http://localhost:5173'],
+    // 手元の開発サーバーは web/vite.config.ts の中継で呼ぶので、localhost は許さない
+    allowedOrigins: [siteUrl],
   });
 
   new AgentStack(app, `${prefix}-agent`, {
