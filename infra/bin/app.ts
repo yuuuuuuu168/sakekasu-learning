@@ -37,7 +37,7 @@ if (app.node.tryGetContext('github-oidc') === 'true') {
   new GithubOidcStack(app, 'sakekasu-learning-github-oidc', {
     env: { account: '232791540685', region },
     envName: 'dev',
-    subjectPrefix: 'repo:yuuuuuuu168@173623628/sakekasu-learning@1414540698',
+    subjectPrefix: 'repo:yuuuuuuu168@173623628/sakekasu-learning@1415173262',
     webRegion,
   });
 } else {
