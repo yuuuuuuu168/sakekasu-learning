@@ -99,9 +99,16 @@ git log --all -p | grep -m1 -E '^\+### 【(不)?正解】選択肢'
 git push --mirror git@github.com:yuuuuuuu168/sakekasu-learning-public.git
 ```
 
-新しいリポジトリに移すと、GitHub Actions の Secrets・Environments、OIDC ロールの信頼ポリシー
-（`infra/lib/github-oidc-stack.ts` のリポジトリ名）、deploy key、content 側の `APP_REPO_TOKEN` の対象も付け替えが要る。
 リポジトリ名を変えずに済ませたいときは、今のリポジトリを別名に変えてから、元の名前で新しいリポジトリを作って push する。
+名前が同じでもリポジトリ ID は変わるので、次の付け替えが要る。
+
+- OIDC ロールの信頼先: `infra/bin/app.ts` の `subjectPrefix` の末尾（`@<リポジトリ ID>`）を新しい ID に変え、
+  `sakekasu-learning-github-oidc` を手元から `cdk deploy` する。ID は `gh api repos/yuuuuuuu168/sakekasu-learning --jq .id` で引ける
+- GitHub Actions の Secrets（`QUESTIONS_DEPLOY_KEY`。「初期設定」の 1 の手順で作り直し、content 側の deploy key も入れ替える）と Environments
+- content 側の `APP_REPO_TOKEN`: PAT の Repository access で `sakekasu-learning` を選び直す（PAT もリポジトリ ID で紐付く）
+- AWS Security Agent: エージェントスペースでリポジトリを削除して追加し直す
+- Issue: `gh issue transfer <番号> yuuuuuuu168/sakekasu-learning --repo <改名した前のリポジトリ>` で番号順に移し、
+  本文の `#N` の参照が正しいか見直す
 
 どうしても今のリポジトリをそのまま public にする場合は、2 の後に `git push --force --all` と `git push --force --tags` で
 上書きし、GitHub Support に「機密データの削除」として、PR の参照とキャッシュされたビューの削除を依頼する
