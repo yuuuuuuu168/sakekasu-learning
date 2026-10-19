@@ -106,10 +106,12 @@ def resolve_question(payload: dict[str, Any]) -> QuestionContext | str:
 
     n = len(question["choices"])
     display_order = payload.get("displayOrder")
+    # 型を先に確かめる（文字列や null が混じると sorted が TypeError を投げる）。
+    # bool は int の派生なので type で比べて弾く
     if not (
         isinstance(display_order, list)
+        and all(type(v) is int for v in display_order)
         and sorted(display_order) == list(range(n))
-        and all(isinstance(v, int) for v in display_order)
     ):
         # 並び順が不正なら原本の順で扱う（相談自体は続けられる）
         display_order = list(range(n))
@@ -117,7 +119,7 @@ def resolve_question(payload: dict[str, Any]) -> QuestionContext | str:
     selected = payload.get("selected") or []
     if not (
         isinstance(selected, list)
-        and all(isinstance(v, int) and 0 <= v < n for v in selected)
+        and all(type(v) is int and 0 <= v < n for v in selected)
         and len(set(selected)) == len(selected)
     ):
         selected = []

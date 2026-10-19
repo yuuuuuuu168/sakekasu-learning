@@ -29,8 +29,14 @@ export function QuestionPage() {
   const [zoomedDiagram, setZoomedDiagram] = useState<string | null>(null);
   /** 「回答する」の前に API を一度呼んでおいた問題 */
   const warmedFor = useRef<string | null>(null);
+  /**
+   * 問題を開くたびに増やす番号。「次の問題へ」で同じ画面のまま問題が替わるので、
+   * 前の問題で出した通信の応答が後から届いても、番号が違えば捨てる
+   */
+  const loadSeq = useRef(0);
 
   const load = useCallback(() => {
+    const seq = ++loadSeq.current;
     setQuestion(null);
     setError(null);
     setResult(null);
@@ -41,10 +47,13 @@ export function QuestionPage() {
     setChatOpen(false);
     api.question(category, exam, id).then(
       (q) => {
+        if (seq !== loadSeq.current) return;
         setQuestion(q);
         setDisplayOrder(shuffledOrder(q.choices.length));
       },
-      (err: Error) => setError(err.message),
+      (err: Error) => {
+        if (seq === loadSeq.current) setError(err.message);
+      },
     );
   }, [category, exam, id]);
   useEffect(load, [load]);
@@ -80,11 +89,13 @@ export function QuestionPage() {
   };
 
   const submit = async () => {
+    const seq = loadSeq.current;
     setSubmitting(true);
     try {
-      setResult(await api.answer(category, exam, id, selected));
+      const res = await api.answer(category, exam, id, selected);
+      if (seq === loadSeq.current) setResult(res);
     } catch (err) {
-      setError((err as Error).message);
+      if (seq === loadSeq.current) setError((err as Error).message);
     } finally {
       setSubmitting(false);
     }
@@ -104,11 +115,16 @@ export function QuestionPage() {
       (o) => result?.diagramChoices.includes(o) && !(o in diagrams),
     );
     if (targets.length === 0) return;
+    const seq = loadSeq.current;
+    // 図解は選択肢の番号をキーに持つので、別の問題の応答を入れると同じ番号の解説に前の問題の図が出る
+    const put = (o: number, image: string) => {
+      if (seq === loadSeq.current) setDiagrams((prev) => ({ ...prev, [o]: image }));
+    };
     setDiagrams((prev) => ({ ...prev, ...Object.fromEntries(targets.map((o) => [o, null])) }));
     for (const o of targets) {
       api.diagram(category, exam, id, o).then(
-        (res) => setDiagrams((prev) => ({ ...prev, [o]: res.image })),
-        () => setDiagrams((prev) => ({ ...prev, [o]: 'error' })),
+        (res) => put(o, res.image),
+        () => put(o, 'error'),
       );
     }
   };

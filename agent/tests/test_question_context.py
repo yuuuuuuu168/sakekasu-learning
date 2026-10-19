@@ -67,3 +67,15 @@ def test_bad_display_order_falls_back():
     ctx = resolve_question(_payload(displayOrder=[0, 0, 1, 2], selected=[9]))
     assert ctx.display_order == [0, 1, 2, 3]
     assert ctx.selected == []
+
+
+def test_display_order_with_non_int_falls_back():
+    # 文字列や null が混じっても例外にせず、原本の順で扱う
+    for order in ([0, "1", 2, 3], [0, None, 2, 3], [True, False, 2, 3]):
+        ctx = resolve_question(_payload(displayOrder=order))
+        assert ctx.display_order == [0, 1, 2, 3]
+
+
+def test_selected_rejects_bool():
+    ctx = resolve_question(_payload(selected=[True]))
+    assert ctx.selected == []

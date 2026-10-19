@@ -14,6 +14,7 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { HISTORY_LIMIT, masteryOf } from '../../../shared/mastery';
 import type { QuestionProgress } from '../../../shared/types';
+import { HttpError } from './http-error';
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = process.env.PROGRESS_TABLE_NAME!;
@@ -118,7 +119,8 @@ export async function recordAnswer(
       if (!(err instanceof ConditionalCheckFailedException)) throw err;
     }
   }
-  throw new Error('回答の記録が競合しました');
+  // 利用者が送り直せば済むので 409 にする（500 にすると 5xx のアラームが鳴る）
+  throw new HttpError(409, '回答の記録が競合しました。もう一度送ってください');
 }
 
 /** 資格1つ分の回答履歴を消す（学習のやり直し用） */
