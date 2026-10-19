@@ -163,17 +163,10 @@ export function QuestionPage() {
 
   return (
     <div className="space-y-5 pb-24">
-      <div className="flex items-center justify-between gap-2">
-        <Link to={examPath} className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
-          <ArrowLeft className="size-4" />
-          問題一覧
-        </Link>
-        {session.position && (
-          <span className="text-sm tabular-nums text-muted">
-            {session.position} / {session.total}
-          </span>
-        )}
-      </div>
+      <Link to={examPath} className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
+        <ArrowLeft className="size-4" />
+        問題一覧
+      </Link>
 
       {/* scroll-mt はヘッダー（h-14 + 枠線）の下に少し余白を残す分 */}
       <article ref={articleRef} className="scroll-mt-16 space-y-4 rounded-2xl border border-grid bg-surface p-5 shadow-sm">
