@@ -48,17 +48,10 @@ export function QuestionPage() {
   useEffect(load, [load]);
 
   const articleRef = useRef<HTMLElement>(null);
-  const firstQuestion = useRef(true);
-  // 開いた最初の問題はページの先頭から、次の問題へ進んだあとは問題文をヘッダーの直下に出す
+  // 問題を開いたら、一覧から開いたときも次の問題へ進んだときも問題文をヘッダーの直下に出す
   // （戻るリンクや進み具合の行を毎回見せない）。描画前にスクロールしてちらつかせない
   useLayoutEffect(() => {
-    if (!question) return;
-    if (firstQuestion.current) {
-      firstQuestion.current = false;
-      window.scrollTo({ top: 0 });
-    } else {
-      articleRef.current?.scrollIntoView({ block: 'start' });
-    }
+    if (question) articleRef.current?.scrollIntoView({ block: 'start' });
   }, [question]);
 
   if (error) return <ErrorMessage message={error} onRetry={load} />;
