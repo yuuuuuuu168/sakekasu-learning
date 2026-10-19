@@ -44,7 +44,6 @@ export function nextInSession(category: string, exam: string, current: string, f
   const index = queue.indexOf(current);
   return {
     position: index >= 0 ? index + 1 : null,
-    total: queue.length,
     next: index >= 0 ? (queue[index + 1] ?? null) : null,
   };
 }
