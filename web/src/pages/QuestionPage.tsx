@@ -50,17 +50,10 @@ export function QuestionPage() {
   useEffect(load, [load]);
 
   const articleRef = useRef<HTMLElement>(null);
-  const firstQuestion = useRef(true);
-  // 開いた最初の問題はページの先頭から、次の問題へ進んだあとは問題文をヘッダーの直下に出す
+  // 問題を開いたら、一覧から開いたときも次の問題へ進んだときも問題文をヘッダーの直下に出す
   // （戻るリンクや進み具合の行を毎回見せない）。描画前にスクロールしてちらつかせない
   useLayoutEffect(() => {
-    if (!question) return;
-    if (firstQuestion.current) {
-      firstQuestion.current = false;
-      window.scrollTo({ top: 0 });
-    } else {
-      articleRef.current?.scrollIntoView({ block: 'start' });
-    }
+    if (question) articleRef.current?.scrollIntoView({ block: 'start' });
   }, [question]);
 
   if (error) return <ErrorMessage message={error} onRetry={load} />;
@@ -178,17 +171,10 @@ export function QuestionPage() {
 
   return (
     <div className="space-y-5 pb-24">
-      <div className="flex items-center justify-between gap-2">
-        <Link to={examPath} className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
-          <ArrowLeft className="size-4" />
-          問題一覧
-        </Link>
-        {session.position && (
-          <span className="text-sm tabular-nums text-muted">
-            {session.position} / {session.total}
-          </span>
-        )}
-      </div>
+      <Link to={examPath} className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
+        <ArrowLeft className="size-4" />
+        問題一覧
+      </Link>
 
       {/* scroll-mt はヘッダー（h-14 + 枠線）の下に少し余白を残す分 */}
       <article ref={articleRef} className="scroll-mt-16 space-y-4 rounded-2xl border border-grid bg-surface p-5 shadow-sm">
