@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, Check, ChevronDown, LoaderCircle, MessageCircle, RotateCcw, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { AnswerResponse, QuestionDetailResponse } from '../../../shared/types';
 import { ChatPanel } from '../components/ChatPanel';
@@ -47,9 +47,19 @@ export function QuestionPage() {
   }, [category, exam, id]);
   useEffect(load, [load]);
 
-  useEffect(() => {
-    window.scrollTo({ top: 0 });
-  }, [id]);
+  const articleRef = useRef<HTMLElement>(null);
+  const firstQuestion = useRef(true);
+  // 開いた最初の問題はページの先頭から、次の問題へ進んだあとは問題文をヘッダーの直下に出す
+  // （戻るリンクや進み具合の行を毎回見せない）。描画前にスクロールしてちらつかせない
+  useLayoutEffect(() => {
+    if (!question) return;
+    if (firstQuestion.current) {
+      firstQuestion.current = false;
+      window.scrollTo({ top: 0 });
+    } else {
+      articleRef.current?.scrollIntoView({ block: 'start' });
+    }
+  }, [question]);
 
   if (error) return <ErrorMessage message={error} onRetry={load} />;
   if (!question) return <Loading />;
@@ -84,7 +94,7 @@ export function QuestionPage() {
     setSelected([]);
     setOpenExplanations(new Set());
     setDisplayOrder(shuffledOrder(question.choices.length));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    articleRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
 
   /** 図解は解説を開いたときに初めて読み込む（1問に数枚あるため、回答時にまとめて取らない） */
@@ -172,7 +182,8 @@ export function QuestionPage() {
         )}
       </div>
 
-      <article className="space-y-4 rounded-2xl border border-grid bg-surface p-5 shadow-sm">
+      {/* scroll-mt はヘッダー（h-14 + 枠線）の下に少し余白を残す分 */}
+      <article ref={articleRef} className="scroll-mt-16 space-y-4 rounded-2xl border border-grid bg-surface p-5 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold text-muted">
             問{question.number}
