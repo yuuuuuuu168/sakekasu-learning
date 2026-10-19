@@ -98,6 +98,15 @@ describe('stacks', () => {
     }
   });
 
+  it('API の Lambda を回収される前に定期的に呼んで温めておく', () => {
+    t.backend.hasResourceProperties('AWS::Events::Rule', {
+      Name: 'sakekasu-learning-test-api-warmer',
+      ScheduleExpression: 'rate(4 minutes)',
+      Targets: [Match.objectLike({ Input: JSON.stringify({ warmup: true }), RetryPolicy: { MaximumRetryAttempts: 0 } })],
+    });
+    t.backend.hasResourceProperties('AWS::Lambda::Permission', { Principal: 'events.amazonaws.com' });
+  });
+
   it('回答履歴テーブルは消えないようにする', () => {
     t.backend.hasResource('AWS::DynamoDB::GlobalTable', {
       DeletionPolicy: 'Retain',

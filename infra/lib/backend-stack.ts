@@ -7,6 +7,8 @@ import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -95,6 +97,22 @@ export class BackendStack extends Stack {
     });
     this.questionsBucket.grantRead(fn);
     this.progressTable.grantReadWriteData(fn);
+
+    // 実行環境は 5 分ほど呼ばれないと回収され、1 問を考えている間に冷えて「回答する」が
+    // 1 秒前後待たされていた（2026-10 のログで、回答の約 4 割がコールドスタートだった）。
+    // 回収される前に呼んで 1 環境を温めておく。問題 JSON の読み込みもこの呼び出しで済ませる
+    new events.Rule(this, 'ApiWarmerRule', {
+      ruleName: `sakekasu-learning-${envName}-api-warmer`,
+      description: 'Keep the learning API Lambda warm (avoid cold starts)',
+      schedule: events.Schedule.rate(Duration.minutes(4)),
+      targets: [
+        new targets.LambdaFunction(fn, {
+          event: events.RuleTargetInput.fromObject({ warmup: true }),
+          // 温めそこねても次の回があるので、再試行はしない
+          retryAttempts: 0,
+        }),
+      ],
+    });
 
     // 共通ユーザープールは別のリポジトリ（sakekasu-integrated_environment）が持つので、ID から参照する。
     const userPool = cognito.UserPool.fromUserPoolId(this, 'SharedUserPool', sharedAuth.userPoolId);

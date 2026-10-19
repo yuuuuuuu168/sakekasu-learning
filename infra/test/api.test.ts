@@ -15,8 +15,10 @@ const exam: ExamFile = {
 
 const store = new Map<string, { history: boolean[]; attempts: number; qkey: string }>();
 
+const loadExam = vi.fn(async (c: string, e: string) => (c === 'aws' && e === 'dop-c02' ? exam : null));
+
 vi.mock('../lambda/api/questions', () => ({
-  loadExam: async (c: string, e: string) => (c === 'aws' && e === 'dop-c02' ? exam : null),
+  loadExam: (c: string, e: string) => loadExam(c, e),
   loadDiagram: async (_c: string, _e: string, id: string, choice: number) => `data:image/png;base64,${id}-${choice}`,
   loadCatalog: async () => ({
     generatedAt: '',
@@ -153,5 +155,11 @@ describe('API', () => {
   it('カタログは未回答数を問題数から数える', async () => {
     const { body } = await call(event('GET /catalog'));
     expect(body.categories[0].exams[0].mastery.unanswered).toBe(2);
+  });
+
+  it('スケジュールからの温めの呼び出しでは、カタログにある資格の問題をすべて読み込んでおく', async () => {
+    loadExam.mockClear();
+    await expect(handler({ warmup: true })).resolves.toBeUndefined();
+    expect(loadExam).toHaveBeenCalledWith('aws', 'dop-c02');
   });
 });
