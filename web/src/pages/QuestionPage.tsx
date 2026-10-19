@@ -27,6 +27,8 @@ export function QuestionPage() {
   /** 選択肢ごとの図解（原本の index → data URL / 読み込み中は null / 失敗は 'error'） */
   const [diagrams, setDiagrams] = useState<Record<number, string | null>>({});
   const [zoomedDiagram, setZoomedDiagram] = useState<string | null>(null);
+  /** 「回答する」の前に API を一度呼んでおいた問題 */
+  const warmedFor = useRef<string | null>(null);
 
   const load = useCallback(() => {
     setQuestion(null);
@@ -70,6 +72,12 @@ export function QuestionPage() {
 
   const toggle = (original: number) => {
     if (result) return;
+    // 考えている間に止まっていた通信の準備（トークンの更新、API への接続、Lambda の起動）を、
+    // 選択肢を選んだ時点で済ませておき、「回答する」を押してからの待ちを減らす
+    if (warmedFor.current !== id) {
+      warmedFor.current = id;
+      api.question(category, exam, id).catch(() => {});
+    }
     setSelected((prev) => {
       if (!multi) return [original];
       if (prev.includes(original)) return prev.filter((v) => v !== original);

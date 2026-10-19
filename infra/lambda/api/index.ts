@@ -8,6 +8,10 @@
  * GET    /exams/{category}/{exam}/questions/{id}/diagrams/{choice}  選択肢の図解（回答済みの問題だけ）
  * DELETE /exams/{category}/{exam}/progress               資格1つ分の履歴を消す
  *
+ * API とは別に、EventBridge のスケジュールから { warmup: true } で数分おきに呼ばれる。
+ * 1 問を考えている間に実行環境が回収され、「回答する」がコールドスタートと問題 JSON の
+ * 読み込みを待たされるのを防ぐため。
+ *
  * 正解と解説は回答を送るまで返さない。採点もサーバーで行い、記録の正しさを
  * クライアントの自己申告に頼らない。
  */
@@ -36,6 +40,11 @@ import {
 import { loadCatalog, loadDiagram, loadExam } from './questions';
 
 type Event = APIGatewayProxyEventV2WithJWTAuthorizer;
+
+/** EventBridge のスケジュールから届く、実行環境を温めておくための呼び出し */
+interface WarmupEvent {
+  warmup: true;
+}
 
 class HttpError extends Error {
   constructor(
@@ -188,7 +197,23 @@ async function getDiagram(event: Event, userId: string): Promise<DiagramResponse
   return { image };
 }
 
-export async function handler(event: Event): Promise<APIGatewayProxyResultV2> {
+/** 問題 JSON をすべてキャッシュに載せておく（最初の回答で S3 からの読み込みを待たせない） */
+async function warmUp(): Promise<void> {
+  const started = Date.now();
+  try {
+    const catalog = await loadCatalog();
+    await Promise.all(
+      catalog.categories.flatMap((c) => c.exams.map((e) => loadExam(e.category, e.exam))),
+    );
+  } catch (err) {
+    // 温め損ねても次の回で取り直せる。投げると Errors のアラームが鳴るので、ログに残すだけにする
+    console.error('問題データの事前読み込みに失敗しました', err);
+  }
+  console.log(JSON.stringify({ route: 'warmup', ms: Date.now() - started }));
+}
+
+export async function handler(event: Event | WarmupEvent): Promise<APIGatewayProxyResultV2 | void> {
+  if ('warmup' in event) return warmUp();
   const started = Date.now();
   const res = await route(event);
   // どの API が遅いかをログで追えるように、経路ごとの処理時間を残す
