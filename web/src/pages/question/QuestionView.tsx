@@ -50,7 +50,7 @@ export function QuestionView({
   }, []);
 
   const multi = question.selectCount > 1;
-  const session = nextInSession(category, exam, id, []);
+  const session = nextInSession(category, exam, id);
   const examPath = `/exams/${category}/${exam}`;
 
   const toggle = (original: number) => {
@@ -85,7 +85,7 @@ export function QuestionView({
   };
 
   const actions = (
-    <NextActions examPath={examPath} next={session.next} inSession={session.position !== null} onRetry={retry} />
+    <NextActions examPath={examPath} next={session.next} inSession={session.inSession} onRetry={retry} />
   );
 
   return (

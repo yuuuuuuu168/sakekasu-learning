@@ -21,10 +21,21 @@ interface StudySession {
 
 const key = (category: string, exam: string) => `study:${category}/${exam}`;
 
+function isStudySession(value: unknown): value is StudySession {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as StudySession).queue) &&
+    (value as StudySession).queue.every((id) => typeof id === 'string')
+  );
+}
+
+/** 保存した並び。無い・読めない・形が違うときは null */
 function read(category: string, exam: string): StudySession | null {
   try {
     const raw = sessionStorage.getItem(key(category, exam));
-    return raw ? (JSON.parse(raw) as StudySession) : null;
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return isStudySession(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -34,16 +45,19 @@ export function startSession(category: string, exam: string, queue: string[]) {
   try {
     sessionStorage.setItem(key(category, exam), JSON.stringify({ queue }));
   } catch {
-    // 保存できなくても、問題一覧の順で「次へ」が動くので致命的ではない
+    // 保存できなくても問題は開ける。「次の問題へ」の代わりに一覧へ戻るボタンが出る
   }
 }
 
-/** 今の問題の次の問題 ID と、並びの中での位置 */
-export function nextInSession(category: string, exam: string, current: string, fallback: string[]) {
-  const queue = read(category, exam)?.queue ?? fallback;
+/**
+ * 今の問題が並びの中にあるか（inSession）と、次の問題 ID（next。最後の問題や並びの外なら null）。
+ * 並びが保存されていない（一覧を通らずに URL で開いた、保存できなかった）ときは並びの外として扱う
+ */
+export function nextInSession(category: string, exam: string, current: string) {
+  const queue = read(category, exam)?.queue ?? [];
   const index = queue.indexOf(current);
   return {
-    position: index >= 0 ? index + 1 : null,
+    inSession: index >= 0,
     next: index >= 0 ? (queue[index + 1] ?? null) : null,
   };
 }
