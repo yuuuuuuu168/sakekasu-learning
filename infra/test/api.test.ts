@@ -15,6 +15,9 @@ const exam: ExamFile = {
 
 const store = new Map<string, { history: boolean[]; attempts: number; qkey: string }>();
 
+/** 次の recordAnswer で投げる例外（競合の再現用） */
+let recordError: Error | null = null;
+
 const loadExam = vi.fn(async (c: string, e: string) => (c === 'aws' && e === 'dop-c02' ? exam : null));
 
 vi.mock('../lambda/api/questions', () => ({
@@ -49,6 +52,7 @@ vi.mock('../lambda/api/progress', async () => {
     listExamProgress: async (_u: string, c: string, e: string) =>
       new Map([...store.values()].map((v) => [v.qkey.slice(prefix(c, e).length), v])),
     recordAnswer: async (_u: string, c: string, e: string, id: string, correct: boolean) => {
+      if (recordError) throw recordError;
       const qkey = `${prefix(c, e)}${id}`;
       const prev = store.get(qkey);
       const next = { qkey, history: [...(prev?.history ?? []), correct], attempts: (prev?.attempts ?? 0) + 1 };
@@ -64,6 +68,7 @@ vi.mock('../lambda/api/progress', async () => {
 });
 
 const { handler } = await import('../lambda/api/index');
+const { HttpError } = await import('../lambda/api/http-error');
 
 function event(routeKey: string, pathParameters: Record<string, string> = {}, body?: unknown, sub = 'user-1') {
   return {
@@ -130,6 +135,18 @@ describe('API', () => {
     const route = 'POST /exams/{category}/{exam}/questions/{id}/answer';
     for (const selected of [[], [9], [0, 0], ['a'], null]) {
       expect((await call(event(route, q('Q-1'), { selected }))).status).toBe(400);
+    }
+  });
+
+  it('記録の競合は 409、それ以外の失敗は 500', async () => {
+    const route = 'POST /exams/{category}/{exam}/questions/{id}/answer';
+    try {
+      recordError = new HttpError(409, '回答の記録が競合しました。もう一度送ってください');
+      expect((await call(event(route, q('Q-1'), { selected: [2] }))).status).toBe(409);
+      recordError = new Error('boom');
+      expect((await call(event(route, q('Q-1'), { selected: [2] }))).status).toBe(500);
+    } finally {
+      recordError = null;
     }
   });
 

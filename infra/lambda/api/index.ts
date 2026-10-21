@@ -28,6 +28,7 @@ import type {
   QuestionDetailResponse,
   QuestionListResponse,
 } from '../../../shared/types';
+import { HttpError } from './http-error';
 import {
   examPrefix,
   getProgress,
@@ -44,15 +45,6 @@ type Event = APIGatewayProxyEventV2WithJWTAuthorizer;
 /** EventBridge のスケジュールから届く、実行環境を温めておくための呼び出し */
 interface WarmupEvent {
   warmup: true;
-}
-
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
 }
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,62}$/;
