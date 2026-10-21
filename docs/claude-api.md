@@ -54,7 +54,9 @@ context を消せばいつでもその状態に戻せる。
 | `agent/src/main.py` | 呼び先を順に試す。返し始める前の失敗とモデルが断ったときだけ次へ回す。消費（トークン数）と回した理由を JSON でログに出す |
 | `agent/pyproject.toml` | `anthropic`、`strands-agents[anthropic]` |
 | `infra/lib/anthropic-federation.ts` | context `anthropicFederation` の読み取りと形の確認（kakeibo と同じ） |
-| `infra/lib/agent-stack.ts` | 環境変数、`sts:GetWebIdentityToken`、Bedrock に回した回数のメトリクスフィルタとアラーム |
+| `infra/lib/agent-stack.ts` | 環境変数（`runtimeEnvironment`） |
+| `infra/lib/agent-runtime-role.ts` | `sts:GetWebIdentityToken` |
+| `infra/lib/agent-alarms.ts` | Bedrock に回した回数のメトリクスフィルタとアラーム |
 
 ### 環境変数（Runtime）
 

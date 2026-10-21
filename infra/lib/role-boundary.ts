@@ -53,7 +53,7 @@ export function createRoleBoundary(scope: Construct, id: string): iam.ManagedPol
         effect: iam.Effect.DENY,
         actions: [
           'iam:*',
-          // sts:* にはしない。Claude API の ID 連携（agent-stack.ts）が sts:GetWebIdentityToken を呼ぶ。
+          // sts:* にはしない。Claude API の ID 連携（agent-runtime-role.ts）が sts:GetWebIdentityToken を呼ぶ。
           // 取れるのは外部のサービス向けの ID トークンで、AWS の権限は増えない。宛先と寿命はロール側の条件で絞ってある
           'sts:AssumeRole*',
           'sts:GetFederationToken',
