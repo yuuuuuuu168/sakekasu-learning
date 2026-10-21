@@ -12,6 +12,7 @@
  * 形式が崩れた問題を黙って取り込むと、正解が無い・解説がずれるといった
  * 気づきにくい不具合になる。問題を見つけたら例外にしてビルドを止める。
  */
+import { QUESTION_ID } from '../../../shared/ids';
 import type { QuestionRecord } from '../../../shared/types';
 
 export class QuestionFormatError extends Error {}
@@ -25,8 +26,6 @@ const SELECT_COUNT = /[（(]\s*([0-9０-９]+)\s*つ選択\s*[）)]/;
 /** 英語の問題文の「(Choose two.)」「(Select 2)」表記 */
 const SELECT_COUNT_EN = /\(\s*(?:choose|select)\s+([0-9]+|two|three|four|five|six)\b[^)]*\)/i;
 const NUMBER_WORDS: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, six: 6 };
-/** 問題番号は URL のパスと DynamoDB のキーに載るため、使える文字を絞る */
-export const QUESTION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 interface RawQuestion {
   id: string;

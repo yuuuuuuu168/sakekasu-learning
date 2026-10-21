@@ -122,6 +122,17 @@ export interface DiagramResponse {
   image: string;
 }
 
+/** DELETE /exams/{category}/{exam}/progress */
+export interface ResetProgressResponse {
+  /** 消した問題の数 */
+  deleted: number;
+}
+
+/** API が 4xx / 5xx で返す本文 */
+export interface ApiErrorResponse {
+  message: string;
+}
+
 /** AI チャットの1発言 */
 export interface ChatMessage {
   role: 'user' | 'assistant';

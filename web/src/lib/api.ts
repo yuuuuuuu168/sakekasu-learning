@@ -1,10 +1,12 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import type {
   AnswerResponse,
+  ApiErrorResponse,
   CatalogResponse,
   DiagramResponse,
   QuestionDetailResponse,
   QuestionListResponse,
+  ResetProgressResponse,
 } from '../../../shared/types';
 import { config } from '../config';
 
@@ -44,7 +46,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (!res.ok) {
     let message = `通信に失敗しました（${res.status}）`;
     try {
-      const data = (await res.json()) as { message?: string };
+      const data = (await res.json()) as Partial<ApiErrorResponse>;
       if (data.message) message = data.message;
     } catch {
       // 本文が JSON でなければ既定のメッセージのまま
@@ -78,5 +80,5 @@ export const api = {
       `${examPath(category, exam)}/questions/${encodeURIComponent(id)}/diagrams/${choice}`,
     ),
   resetProgress: (category: string, exam: string) =>
-    request<{ deleted: number }>('DELETE', `${examPath(category, exam)}/progress`),
+    request<ResetProgressResponse>('DELETE', `${examPath(category, exam)}/progress`),
 };
