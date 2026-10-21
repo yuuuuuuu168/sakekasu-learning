@@ -17,7 +17,7 @@ sakekasu-learning-content (private)
 sakekasu-learning の deploy.yml（main への push / questions-updated / 手動）
   │  deploy key で content/ に取得 → build:questions → 非公開バケットへ同期
   ▼
-s3://sakekasu-learning-dev-questions-232791540685（API Lambda と AI チャットだけが読む）
+s3://sakekasu-learning-dev-questions-<アプリのアカウント ID>（API Lambda と AI チャットだけが読む）
 ```
 
 - `content/` は `.gitignore` で外してある。手元やクラウドセッションでは、content リポジトリを `content/` に clone して使う

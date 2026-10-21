@@ -7,7 +7,7 @@
 - 作業は feature ブランチで行い、PR を作る。main へのマージは人間様が行う
 - AWS へのデプロイは main へのマージ経由（deploy.yml）だけ。ローカルからの `cdkd deploy` / `cdk deploy` は行わない（例外は `sakekasu-learning-github-oidc` スタックの `cdk deploy`）
 - github-oidc 以外のスタックは cdkd（CloudFormation を使わない）で管理する。スタックの出力は `npx cdkd state show <スタック名> --json` で読む。cdkd のバージョンは `infra/package.json` で固定している
-- ローカルの AWS CLI / CDK は `AWS_PROFILE=sakekasu-builder` を付けて実行する（アカウント 232791540685）。クラウドセッションでは下の「AWS 確認作業の認証フロー」の読み取り専用プロファイルを使う
+- ローカルの AWS CLI / CDK は `AWS_PROFILE=sakekasu-builder` を付けて実行する（アプリのアカウント）。クラウドセッションでは下の「AWS 確認作業の認証フロー」の読み取り専用プロファイルを使う
 
 ## PR を作ったら watch する
 
@@ -58,11 +58,11 @@ AWS CLI v2 の導入、読み取り専用プロファイルの配置、SSO ロ�
 
 | プロファイル | アカウント | 使いどころ |
 | --- | --- | --- |
-| `verify` | 232791540685（Web アプリのデプロイ先） | アプリのログ・メトリクス・リソースの確認 |
+| `verify` | Web アプリのデプロイ先 | アプリのログ・メトリクス・リソースの確認 |
 | `verify-org` | Organization の管理アカウント | 組織・請求・Identity Center の確認 |
 | `verify-ops` | 運用ツール用 | Security Agent / DevOps Agent の確認 |
 
-接続先は [scripts/aws-verify.conf](scripts/aws-verify.conf) にある。Identity Center の開始 URL と、管理アカウント・運用アカウントの ID は公開リポジトリに置かないため、クラウド環境の Environment variables （`SSO_START_URL`、`SSO_EXTRA_PROFILES`）で渡す。どれも Permission Set
+接続先は [scripts/aws-verify.conf](scripts/aws-verify.conf) にある。Identity Center の開始 URL と、アカウントの ID は公開リポジトリに置かないため、クラウド環境の Environment variables （`SSO_START_URL`、`SSO_ACCOUNT_ID`、`SSO_EXTRA_PROFILES`）で渡す。どれも Permission Set
 `AgentVerifyAccess` で、create / update / delete / put 系の変更操作はできない。変更操作は
 [scripts/deny-aws-writes.sh](scripts/deny-aws-writes.sh)（`PreToolUse` フック）も止める。
 CloudWatch Logs とメトリクスは読めるが、S3 オブジェクト本文・DynamoDB レコード・
@@ -73,7 +73,8 @@ variables に `SAKEKASU_AWS_LOGIN=1` を設定する。
 
 認証エラーに見える失敗が出たら、まずクラウド環境のネットワーク設定で `awsapps.com` と
 `*.amazonaws.com` への到達が許可されているかを疑う。`No access` が返るときは、承認した
-Identity Center のユーザーがグループ `sakekasu` に入っているかを疑う。
+Identity Center のユーザーに `AgentVerifyAccess` が割り当てられているか（割り当て用のグループに
+入っているか）を疑う。
 
 `aws-sso-login.sh` と `setup-aws-profile.sh` は `~/.aws/config` を上書きするため、
 クラウドセッション（`CLAUDE_CODE_REMOTE=true`）でのみ動作する。ローカルでは何もせず終了する。

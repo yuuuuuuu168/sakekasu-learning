@@ -33,8 +33,12 @@ const webRegion = 'us-east-1';
 
 // CI 用ロールは CI 自身の権限を変えるため、手動でだけデプロイする
 if (app.node.tryGetContext('github-oidc') === 'true') {
+  // アカウント ID はリポジトリに書かない（公開リポジトリなので）。AWS_PROFILE を付けて合成すると CDK が入れる
+  if (!account) {
+    throw new Error('github-oidc スタックにはデプロイ先のアカウントが要る。AWS_PROFILE を付けて合成するか、環境変数 CDK_DEFAULT_ACCOUNT を入れる');
+  }
   new GithubOidcStack(app, 'sakekasu-learning-github-oidc', {
-    env: { account: '232791540685', region },
+    env: { account, region },
     envName: 'dev',
     subjectPrefix: 'repo:yuuuuuuu168@173623628/sakekasu-learning@1415173262',
     webRegion,
