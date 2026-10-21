@@ -67,14 +67,14 @@ function synth() {
     backendRegion: 'ap-northeast-1',
     authDomain: sharedAuth.domain,
   });
-  return { backend, agent, web };
+  return { backend: Template.fromStack(backend), agent: Template.fromStack(agent), web: Template.fromStack(web) };
 }
 
 /** 論理 ID → [種類, 物理名, DeletionPolicy]。物理名が null のものは cdkd が論理 ID から名前を導く */
 type Named = Record<string, [type: string, name: string | null, deletion: 'Retain' | 'Delete']>;
 
-function namedResources(stack: cdk.Stack): Named {
-  const resources = Template.fromStack(stack).toJSON().Resources as Record<string, any>;
+function namedResources(template: Template): Named {
+  const resources = template.toJSON().Resources as Record<string, any>;
   const out: Named = {};
   for (const [id, r] of Object.entries(resources)) {
     const name = NAME_PROPERTY[r.Type];
