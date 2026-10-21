@@ -22,10 +22,12 @@ beforeEach(() => {
 describe('recordAnswer', () => {
   it('初回は存在しないことを条件に書く', async () => {
     send.mockResolvedValue({});
-    const item = await recordAnswer('u', 'aws', 'dop-c02', 'Q-1', true, [2]);
+    const item = await recordAnswer('u', 'aws', 'dop-c02', 'Q-1', true);
     expect(item).toMatchObject({ qkey: 'aws/dop-c02#Q-1', history: [true], attempts: 1 });
     const put = send.mock.calls.map(([c]) => c).find((c) => c instanceof PutCommand) as PutCommand;
     expect(put.input.ConditionExpression).toBe('attribute_not_exists(qkey)');
+    // 選んだ選択肢は残さない
+    expect(Object.keys(put.input.Item!).sort()).toEqual(['attempts', 'history', 'lastAnsweredAt', 'qkey', 'userId']);
   });
 
   it('競合したら読み直して、新しい履歴に積む', async () => {
@@ -46,7 +48,7 @@ describe('recordAnswer', () => {
       }
       throw new Error(`unexpected ${cmd.constructor.name}`);
     });
-    const item = await recordAnswer('u', 'aws', 'dop-c02', 'Q-1', true, [2]);
+    const item = await recordAnswer('u', 'aws', 'dop-c02', 'Q-1', true);
     expect(item).toMatchObject({ history: [false, true, true], attempts: 3 });
     const puts = send.mock.calls.map(([c]) => c).filter((c) => c instanceof PutCommand) as PutCommand[];
     expect(puts.at(-1)!.input.ExpressionAttributeValues).toEqual({ ':prev': 2 });
@@ -57,7 +59,7 @@ describe('recordAnswer', () => {
       if (cmd instanceof GetCommand) return { Item: { history: [], attempts: 1 } };
       throw conflict();
     });
-    const err = await recordAnswer('u', 'aws', 'dop-c02', 'Q-1', true, [2]).catch((e) => e);
+    const err = await recordAnswer('u', 'aws', 'dop-c02', 'Q-1', true).catch((e) => e);
     expect(err).toBeInstanceOf(HttpError);
     expect(err.status).toBe(409);
     expect(send.mock.calls.filter(([c]) => c instanceof PutCommand)).toHaveLength(3);
@@ -68,7 +70,7 @@ describe('recordAnswer', () => {
       if (cmd instanceof GetCommand) return {};
       throw new Error('throttled');
     });
-    await expect(recordAnswer('u', 'aws', 'dop-c02', 'Q-1', true, [2])).rejects.toThrow('throttled');
+    await expect(recordAnswer('u', 'aws', 'dop-c02', 'Q-1', true)).rejects.toThrow('throttled');
   });
 });
 

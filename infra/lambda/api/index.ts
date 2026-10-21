@@ -173,7 +173,7 @@ async function postAnswer(event: Event, userId: string): Promise<AnswerResponse>
     : event.body;
   const selected = parseAnswer(body, question.choices.length);
   const correct = isCorrect(selected, question.answers);
-  const item = await recordAnswer(userId, category, exam, id, correct, selected);
+  const item = await recordAnswer(userId, category, exam, id, correct);
   return {
     correct,
     answers: question.answers,
