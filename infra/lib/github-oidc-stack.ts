@@ -114,17 +114,6 @@ export class GithubOidcStack extends Stack {
         resources: [`arn:aws:cloudfront::${this.account}:distribution/*`],
       }),
     );
-    deployRole.addToPolicy(
-      new iam.PolicyStatement({
-        // 移行スクリプト（cdkd-stacks.sh migrate）用。移行が済み deploy からは呼ばなくなったので、
-        // 次に IAM を変えるときに外してよい（読み取りだけなので残しても害は無い）
-        sid: 'ReadStacks',
-        actions: ['cloudformation:DescribeStacks', 'cloudformation:DescribeStackResources'],
-        resources: [this.region, webRegion].map(
-          (r) => `arn:aws:cloudformation:${r}:${this.account}:stack/sakekasu-learning-${envName}-*/*`,
-        ),
-      }),
-    );
 
     const diffRole = new iam.Role(this, 'DiffRole', {
       roleName: 'sakekasu-learning-github-actions-diff',
@@ -193,7 +182,8 @@ export class GithubOidcStack extends Stack {
     );
     diffRole.addToPolicy(
       new iam.PolicyStatement({
-        // 移行スクリプトが CloudFormation のスタックが残っているかを確かめる
+        // PR の cdkd diff（cdkd-stacks.sh preview）が、CloudFormation のスタックが残っていないかを毎回確かめる。
+        // deploy ロールからは外したが、こちらは使っているので外さない
         sid: 'ReadStacks',
         actions: ['cloudformation:DescribeStacks'],
         resources: [this.region, webRegion].map(
