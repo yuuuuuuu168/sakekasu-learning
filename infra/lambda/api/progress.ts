@@ -24,7 +24,6 @@ interface ProgressItem {
   qkey: string;
   history: boolean[];
   attempts: number;
-  lastSelected?: number[];
   lastAnsweredAt?: string;
 }
 
@@ -85,6 +84,8 @@ export async function getProgress(userId: string, category: string, exam: string
  * 回答を1件記録する。
  * 同じ問題への同時回答（別タブなど）で履歴を取りこぼさないよう、attempts を
  * 楽観ロックに使い、競合したら読み直してやり直す。
+ * 選んだ選択肢は記録しない（採点にしか使わない）。前は lastSelected に残していたが、どこからも
+ * 読まれていなかった。古いアイテムに残っている値は、次にその問題に回答したときの上書きで消える
  */
 export async function recordAnswer(
   userId: string,
@@ -92,7 +93,6 @@ export async function recordAnswer(
   exam: string,
   id: string,
   correct: boolean,
-  selected: number[],
 ): Promise<ProgressItem> {
   const qkey = `${examPrefix(category, exam)}${id}`;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -102,7 +102,6 @@ export async function recordAnswer(
       qkey,
       history: [...(current?.history ?? []), correct].slice(-HISTORY_LIMIT),
       attempts: (current?.attempts ?? 0) + 1,
-      lastSelected: selected,
       lastAnsweredAt: new Date().toISOString(),
     };
     try {
