@@ -28,8 +28,9 @@ def _payload(**kw):
     return base
 
 
-def setup_function():
-    question_context.load_exam = lambda category, exam: EXAM
+@pytest.fixture(autouse=True)
+def _exam(monkeypatch):
+    monkeypatch.setattr(question_context, "load_exam", lambda category, exam: EXAM)
 
 
 def test_relabel_uses_display_order():
