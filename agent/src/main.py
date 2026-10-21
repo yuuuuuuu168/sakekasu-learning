@@ -42,6 +42,7 @@ DOC_TOOLS = [
     "aws___get_regional_availability",
 ]
 
+# shared/chat.ts と同じ（tests/test_shared_chat.py で一致を確かめる）
 MAX_PROMPT_LENGTH = 2000
 MAX_HISTORY_MESSAGES = 20
 MAX_HISTORY_MESSAGE_LENGTH = 8000

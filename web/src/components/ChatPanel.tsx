@@ -6,11 +6,10 @@
  */
 import { Bot, LoaderCircle, Send, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { MAX_PROMPT_LENGTH } from '../../../shared/chat';
 import type { ChatMessage } from '../../../shared/types';
-import { newSessionId, sendChat } from '../lib/chat';
 import { Markdown } from './Markdown';
-
-const MAX_PROMPT_LENGTH = 2000;
+import { useChatSession } from './useChatSession';
 
 const SUGGESTIONS_ANSWERED = [
   'なぜこれが正解なのか、ポイントを整理して',
@@ -40,69 +39,36 @@ export function ChatPanel({
   displayOrder,
   selected,
 }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { messages, streaming, error, send: sendPrompt, abort } = useChatSession({
+    category,
+    exam,
+    questionId,
+    displayOrder,
+    selected,
+  });
   const [input, setInput] = useState('');
-  const [streaming, setStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const sessionId = useRef(newSessionId());
-  const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, open]);
 
   const answered = selected.length > 0;
 
-  const send = async (prompt: string) => {
-    const text = prompt.trim();
-    if (!text || streaming) return;
-    setError(null);
-    setInput('');
-    const history = messages;
-    setMessages([...history, { role: 'user', content: text }, { role: 'assistant', content: '' }]);
-    setStreaming(true);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-    try {
-      const stream = sendChat(
-        { category, exam, questionId, displayOrder, selected, history, prompt: text },
-        { sessionId: sessionId.current, signal: controller.signal },
-      );
-      for await (const chunk of stream) {
-        setMessages((prev) => {
-          const next = [...prev];
-          const last = next[next.length - 1];
-          next[next.length - 1] = { ...last, content: last.content + chunk };
-          return next;
-        });
-      }
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') setError((err as Error).message);
-    } finally {
-      setStreaming(false);
-      abortRef.current = null;
-      // 応答が空のまま終わった発言は残さない（次の送信で履歴が崩れないように）
-      setMessages((prev) =>
-        prev.length > 0 && prev[prev.length - 1].role === 'assistant' && !prev[prev.length - 1].content
-          ? prev.slice(0, -2)
-          : prev,
-      );
-    }
+  const send = (prompt: string) => {
+    if (sendPrompt(prompt)) setInput('');
   };
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    void send(input);
+    send(input);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // IME 変換中の Enter は送信しない
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      void send(input);
+      send(input);
     }
   };
 
@@ -114,8 +80,9 @@ export function ChatPanel({
         className={`fixed inset-0 z-40 bg-slate-900/30 transition-opacity ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
         onClick={onClose}
       />
+      {/* 閉じている間は画面の外にあるだけなので、inert で Tab の移動先や読み上げから外す */}
       <aside
-        aria-hidden={!open}
+        inert={!open}
         className={`fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-surface shadow-2xl transition-transform sm:max-w-lg ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
@@ -148,7 +115,7 @@ export function ChatPanel({
                 {suggestions.map((s) => (
                   <button
                     key={s}
-                    onClick={() => void send(s)}
+                    onClick={() => send(s)}
                     className="rounded-full bg-surface-2 px-3 py-1.5 text-left text-xs text-ink-2 hover:bg-accent-weak hover:text-accent"
                   >
                     {s}
@@ -157,26 +124,9 @@ export function ChatPanel({
               </div>
             </div>
           )}
-          {messages.map((m, i) =>
-            m.role === 'user' ? (
-              <div key={i} className="flex justify-end">
-                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-accent px-3.5 py-2 text-sm text-on-fill">
-                  {m.content}
-                </p>
-              </div>
-            ) : (
-              <div key={i} className="rounded-2xl rounded-bl-sm bg-plane px-3.5 py-2.5">
-                {m.content ? (
-                  <Markdown className="prose-sm">{m.content}</Markdown>
-                ) : (
-                  <span className="flex items-center gap-2 text-sm text-muted">
-                    <LoaderCircle className="size-4 animate-spin" />
-                    ドキュメントを確認しながら考えています…
-                  </span>
-                )}
-              </div>
-            ),
-          )}
+          {messages.map((m, i) => (
+            <MessageBubble key={i} message={m} />
+          ))}
           {error && <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
           <div ref={bottomRef} />
         </div>
@@ -195,7 +145,7 @@ export function ChatPanel({
             {streaming ? (
               <button
                 type="button"
-                onClick={() => abortRef.current?.abort()}
+                onClick={abort}
                 className="flex size-11 items-center justify-center rounded-xl bg-surface-2 text-ink-2 hover:bg-grid"
                 aria-label="停止"
               >
@@ -217,5 +167,29 @@ export function ChatPanel({
         </form>
       </aside>
     </>
+  );
+}
+
+function MessageBubble({ message }: { message: ChatMessage }) {
+  if (message.role === 'user') {
+    return (
+      <div className="flex justify-end">
+        <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-accent px-3.5 py-2 text-sm text-on-fill">
+          {message.content}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-2xl rounded-bl-sm bg-plane px-3.5 py-2.5">
+      {message.content ? (
+        <Markdown className="prose-sm">{message.content}</Markdown>
+      ) : (
+        <span className="flex items-center gap-2 text-sm text-muted">
+          <LoaderCircle className="size-4 animate-spin" />
+          ドキュメントを確認しながら考えています…
+        </span>
+      )}
+    </div>
   );
 }
