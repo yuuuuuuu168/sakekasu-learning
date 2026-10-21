@@ -23,7 +23,8 @@ function invocationUrl(): string {
   );
 }
 
-function parseDataLine(line: string): string | null {
+/** SSE の 1 行から応答の文字列を取り出す。data 行でなければ null、エラーの知らせなら投げる */
+export function parseDataLine(line: string): string | null {
   if (!line.startsWith('data:')) return null;
   const payload = line.slice('data:'.length).trim();
   if (!payload) return null;
@@ -38,6 +39,30 @@ function parseDataLine(line: string): string | null {
     if (err instanceof SyntaxError) return null;
     throw err;
   }
+}
+
+/**
+ * 受け取ったバイト列を SSE の行に分けて、応答の文字列を取り出す。
+ * 行はチャンクの境目で切れて届くことがあるので、最後の行の途中は次のチャンクまで持ち越す
+ */
+export function createSseParser() {
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const parse = (lines: string[]) => lines.map(parseDataLine).filter((text): text is string => text !== null);
+  return {
+    push(chunk: Uint8Array): string[] {
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      return parse(lines);
+    },
+    /** 最後に改行なしで残った行 */
+    flush(): string[] {
+      const rest = buffer + decoder.decode();
+      buffer = '';
+      return parse([rest]);
+    },
+  };
 }
 
 export async function* sendChat(
@@ -60,23 +85,14 @@ export async function* sendChat(
   if (!res.ok || !res.body) throw new Error(`AI の呼び出しに失敗しました（${res.status}）`);
 
   const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
+  const parser = createSseParser();
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      // 最後の要素は行の途中かもしれないので次のチャンクへ持ち越す
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        const text = parseDataLine(line);
-        if (text !== null) yield text;
-      }
+      yield* parser.push(value);
     }
-    const rest = parseDataLine(buffer);
-    if (rest !== null) yield rest;
+    yield* parser.flush();
   } finally {
     await reader.cancel().catch(() => {});
   }
