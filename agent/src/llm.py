@@ -33,7 +33,7 @@ Provider = Literal["anthropic", "bedrock"]
 DEFAULT_ANTHROPIC_MODEL_CHAT = "claude-haiku-5-5"
 DEFAULT_BEDROCK_MODEL_ID = "global.moonshotai.kimi-k3"
 
-# STS に頼む ID トークン（JWT）の宛先と寿命。infra/lib/agent-stack.ts の
+# STS に頼む ID トークン（JWT）の宛先と寿命。infra/lib/agent-runtime-role.ts の
 # sts:GetWebIdentityToken の条件と、Claude Console のフェデレーションルールの audience に合わせてある
 IDENTITY_TOKEN_AUDIENCE = "https://api.anthropic.com"
 IDENTITY_TOKEN_SECONDS = 300
