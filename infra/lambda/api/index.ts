@@ -19,14 +19,17 @@ import type {
   APIGatewayProxyEventV2WithJWTAuthorizer,
   APIGatewayProxyResultV2,
 } from 'aws-lambda';
+import { QUESTION_ID, SLUG } from '../../../shared/ids';
 import { emptyMasteryCounts, isCorrect, masteryOf } from '../../../shared/mastery';
 import type {
   AnswerRequest,
   AnswerResponse,
+  ApiErrorResponse,
   CatalogResponse,
   DiagramResponse,
   QuestionDetailResponse,
   QuestionListResponse,
+  ResetProgressResponse,
 } from '../../../shared/types';
 import { HttpError } from './http-error';
 import {
@@ -47,8 +50,6 @@ interface WarmupEvent {
   warmup: true;
 }
 
-const SLUG = /^[a-z0-9][a-z0-9-]{0,62}$/;
-const QUESTION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 function json(status: number, body: unknown): APIGatewayProxyResultV2 {
   return {
@@ -56,6 +57,11 @@ function json(status: number, body: unknown): APIGatewayProxyResultV2 {
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
     body: JSON.stringify(body),
   };
+}
+
+function errorJson(status: number, message: string): APIGatewayProxyResultV2 {
+  const body: ApiErrorResponse = { message };
+  return json(status, body);
 }
 
 function pathParam(event: Event, name: string, pattern: RegExp): string {
@@ -216,7 +222,7 @@ export async function handler(event: Event | WarmupEvent): Promise<APIGatewayPro
 
 async function route(event: Event): Promise<APIGatewayProxyResultV2> {
   const userId = event.requestContext.authorizer?.jwt?.claims?.sub;
-  if (typeof userId !== 'string' || !userId) return json(401, { message: 'unauthorized' });
+  if (typeof userId !== 'string' || !userId) return errorJson(401, 'unauthorized');
 
   try {
     switch (event.routeKey) {
@@ -232,14 +238,15 @@ async function route(event: Event): Promise<APIGatewayProxyResultV2> {
         return json(200, await getDiagram(event, userId));
       case 'DELETE /exams/{category}/{exam}/progress': {
         const { category, exam } = await requireExam(event);
-        return json(200, { deleted: await resetExamProgress(userId, category, exam) });
+        const res: ResetProgressResponse = { deleted: await resetExamProgress(userId, category, exam) };
+        return json(200, res);
       }
       default:
-        return json(404, { message: 'not found' });
+        return errorJson(404, 'not found');
     }
   } catch (err) {
-    if (err instanceof HttpError) return json(err.status, { message: err.message });
+    if (err instanceof HttpError) return errorJson(err.status, err.message);
     console.error(err);
-    return json(500, { message: 'internal error' });
+    return errorJson(500, 'internal error');
   }
 }

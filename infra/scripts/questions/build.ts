@@ -22,15 +22,13 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SLUG } from '../../../shared/ids';
 import type { Catalog, CategorySummary, ExamFile } from '../../../shared/types';
 import { parseQuestions } from './parse';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 export const CONTENT_DIR = resolve(ROOT, process.env.QUESTIONS_CONTENT_DIR ?? 'content');
 const OUT_DIR = join(ROOT, 'build/questions');
-
-/** URL とS3 キーに使うため、ディレクトリ名は英小文字・数字・ハイフンに限る */
-const SLUG = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 interface CategoryMeta {
   name: string;

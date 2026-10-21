@@ -17,6 +17,7 @@ from typing import Any
 
 import boto3
 
+# shared/ids.ts と同じ（tests/test_shared_ids.py で一致を確かめる）
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 QUESTION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 LABELS = string.ascii_uppercase
