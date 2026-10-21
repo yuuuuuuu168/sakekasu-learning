@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import string
@@ -16,16 +17,22 @@ from dataclasses import dataclass
 from typing import Any
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 # shared/ids.ts と同じ（tests/test_shared_ids.py で一致を確かめる）
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 QUESTION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 LABELS = string.ascii_uppercase
 
+log = logging.getLogger("tutor.questions")
 
 
 class InvalidRequest(Exception):
     """相談を受け付けられない入力。message はそのまま受験者に返す。"""
+
+
+class QuestionsUnavailable(Exception):
+    """問題データを読めない（権限・通信・データの破損など、受験者の入力のせいではない失敗）。"""
 
 
 _TTL_SECONDS = 300
@@ -41,7 +48,24 @@ def _client():
     return _s3
 
 
+def _is_exam_file(value: Any) -> bool:
+    """resolve_question と render_question が読む項目がそろっているか。"""
+    if not isinstance(value, dict) or not isinstance(value.get("questions"), list):
+        return False
+    return all(
+        isinstance(q, dict)
+        and isinstance(q.get("id"), str)
+        and isinstance(q.get("question"), str)
+        and all(isinstance(q.get(k), list) for k in ("choices", "answers", "explanations"))
+        for q in value["questions"]
+    )
+
+
 def load_exam(category: str, exam: str) -> dict[str, Any] | None:
+    """資格 1 つ分の問題データ。無ければ None。読めなければ QuestionsUnavailable を投げる。
+
+    見つかった結果と「無い」という結果は TTL のあいだ覚えておく。読めなかったときは覚えず、次の相談で読み直す。
+    """
     key = f"{category}/{exam}.json"
     now = time.monotonic()
     with _lock:
@@ -51,8 +75,18 @@ def load_exam(category: str, exam: str) -> dict[str, Any] | None:
     try:
         res = _client().get_object(Bucket=os.environ["QUESTIONS_BUCKET_NAME"], Key=key)
         value = json.loads(res["Body"].read())
-    except _client().exceptions.NoSuchKey:
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") != "NoSuchKey":
+            log.exception("問題データを読めませんでした key=%s", key)
+            raise QuestionsUnavailable(key) from error
         value = None
+    except (BotoCoreError, KeyError, ValueError) as error:
+        # KeyError はバケット名の環境変数が無いとき、ValueError は JSON が壊れているとき
+        log.exception("問題データを読めませんでした key=%s", key)
+        raise QuestionsUnavailable(key) from error
+    if value is not None and not _is_exam_file(value):
+        log.error("問題データの形が不正です key=%s", key)
+        raise QuestionsUnavailable(key)
     with _lock:
         _cache[key] = (now + _TTL_SECONDS, value)
     return value

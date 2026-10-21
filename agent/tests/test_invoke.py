@@ -10,7 +10,7 @@ import pytest
 os.environ.setdefault("AWS_REGION", "ap-northeast-1")
 
 import main  # noqa: E402
-from question_context import InvalidRequest  # noqa: E402
+from question_context import InvalidRequest, QuestionsUnavailable  # noqa: E402
 
 HEADERS = SimpleNamespace(request_headers={"Authorization": "Bearer x"})
 
@@ -83,4 +83,13 @@ def test_invalid_question_does_not_consume(monkeypatch, calls):
 
     monkeypatch.setattr(main, "resolve_question", resolve)
     assert _invoke({"prompt": "hi"}) == "問題が見つかりませんでした。"
+    assert calls == {"quota": [], "agent": []}
+
+
+def test_unreadable_questions_do_not_consume(monkeypatch, calls):
+    def resolve(_):
+        raise QuestionsUnavailable("aws/dop.json")
+
+    monkeypatch.setattr(main, "resolve_question", resolve)
+    assert _invoke({"prompt": "hi"}) == main.UNAVAILABLE_MESSAGE
     assert calls == {"quota": [], "agent": []}

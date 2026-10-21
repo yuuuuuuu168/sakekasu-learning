@@ -24,7 +24,13 @@ from strands.tools.mcp import MCPClient
 
 from auth import verify_access_token
 from llm import ModelChoice, RefusalError, create_model, fallback_reason, model_chain
-from question_context import InvalidRequest, QuestionContext, render_question, resolve_question
+from question_context import (
+    InvalidRequest,
+    QuestionContext,
+    QuestionsUnavailable,
+    render_question,
+    resolve_question,
+)
 from quota import QuotaResult, consume as consume_quota, daily_limit
 
 logging.basicConfig(level=logging.INFO)
@@ -45,6 +51,8 @@ DOC_TOOLS = [
 MAX_PROMPT_LENGTH = 2000
 MAX_HISTORY_MESSAGES = 20
 MAX_HISTORY_MESSAGE_LENGTH = 8000
+
+UNAVAILABLE_MESSAGE = "ただいま相談を受け付けられません。時間をおいてもう一度お試しください。"
 
 SYSTEM_PROMPT = """あなたは IT 資格試験の学習を手伝う家庭教師です。受験者は下記の問題について相談しています。
 
@@ -158,7 +166,7 @@ def _quota_refusal(quota: QuotaResult) -> str | None:
         return f"今日の相談回数の上限（{daily_limit()}回）に達しました。明日（日本時間の 0 時以降）にまたお試しください。"
     if quota is QuotaResult.UNAVAILABLE:
         # 数えられないときは、上限を守れないので呼ばない（費用の上限を優先する）
-        return "ただいま相談を受け付けられません。時間をおいてもう一度お試しください。"
+        return UNAVAILABLE_MESSAGE
     return None
 
 
@@ -239,6 +247,10 @@ async def invoke(payload: Any, context: Any):
         ctx = await asyncio.to_thread(resolve_question, payload)
     except InvalidRequest as error:
         yield str(error)
+        return
+    except QuestionsUnavailable:
+        # 受験者の入力のせいではないので、送り直しを促す（原因はログに残してある）
+        yield UNAVAILABLE_MESSAGE
         return
 
     # モデルを呼ぶ直前に数える。入力の誤りや存在しない問題では回数を減らさない
