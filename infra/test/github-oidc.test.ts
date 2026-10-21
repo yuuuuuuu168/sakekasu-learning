@@ -66,6 +66,16 @@ describe('github-oidc', () => {
     ]);
   });
 
+  it('CloudFormation のスタックを読むのは diff ロールだけ（移行の確認は PR の cdkd diff だけが行う）', () => {
+    const actionsOf = (roleId: RegExp) =>
+      Object.values(t.findResources('AWS::IAM::Policy'))
+        .filter((p) => roleId.test(JSON.stringify(p.Properties.Roles)))
+        .flatMap((p) => p.Properties.PolicyDocument.Statement)
+        .flatMap((s) => [s.Action].flat());
+    expect(actionsOf(/DeployRole/).filter((a: string) => a.startsWith('cloudformation:'))).toEqual([]);
+    expect(actionsOf(/DiffRole/)).toContain('cloudformation:DescribeStacks');
+  });
+
   it('deploy ロールは CDK のブートストラップロールを引き受けない（cdkd 移行後は不要）', () => {
     // ガードレール（Deny）は bootstrap の資産置き場の名前を含むので、許可の文だけを見る
     const allows = Object.values(t.findResources('AWS::IAM::Policy')).flatMap((p) =>
