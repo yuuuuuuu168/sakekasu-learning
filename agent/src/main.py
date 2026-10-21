@@ -24,7 +24,7 @@ from strands.tools.mcp import MCPClient
 
 from auth import verify_access_token
 from llm import ModelChoice, RefusalError, create_model, fallback_reason, model_chain
-from question_context import QuestionContext, render_question, resolve_question
+from question_context import InvalidRequest, QuestionContext, render_question, resolve_question
 from quota import QuotaResult, consume as consume_quota, daily_limit
 
 logging.basicConfig(level=logging.INFO)
@@ -134,89 +134,122 @@ def _log_usage(choice: ModelChoice, result: Any) -> None:
     log.info("[chat] llm %s", json.dumps(entry))
 
 
-@app.entrypoint
-async def invoke(payload: Any, context: Any):
+def _authorization(context: Any) -> str | None:
     headers = getattr(context, "request_headers", None) or {}
-    authorization = next((v for k, v in headers.items() if k.lower() == "authorization"), None)
-    user = await asyncio.to_thread(verify_access_token, authorization)
-    if not user:
-        log.warning("認証されていないリクエストを拒否しました")
-        yield "認証情報を確認できませんでした。ログインし直してからもう一度お試しください。"
-        return
+    return next((v for k, v in headers.items() if k.lower() == "authorization"), None)
 
+
+def _validate_prompt(payload: Any) -> str:
+    """今回の相談内容を取り出す。受け付けられない入力なら InvalidRequest を投げる。"""
     if not isinstance(payload, dict):
-        yield "リクエストの形式が不正です。"
-        return
-
+        raise InvalidRequest("リクエストの形式が不正です。")
     prompt = payload.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
-        yield "相談内容を入力してください。"
-        return
+        raise InvalidRequest("相談内容を入力してください。")
     if len(prompt) > MAX_PROMPT_LENGTH:
-        yield f"相談内容が長すぎます。{MAX_PROMPT_LENGTH}文字以内でお願いします。"
-        return
+        raise InvalidRequest(f"相談内容が長すぎます。{MAX_PROMPT_LENGTH}文字以内でお願いします。")
+    return prompt
 
-    ctx = await asyncio.to_thread(resolve_question, payload)
-    if isinstance(ctx, str):
-        yield ctx
-        return
 
-    # モデルを呼ぶ直前に数える。入力の誤りや存在しない問題では回数を減らさない
-    quota = await asyncio.to_thread(consume_quota, user)
+def _quota_refusal(quota: QuotaResult) -> str | None:
+    """相談回数の判定で断るときの文言。続けてよいなら None。"""
     if quota is QuotaResult.EXCEEDED:
         log.info("1 日の上限に達したため断りました")
-        yield f"今日の相談回数の上限（{daily_limit()}回）に達しました。明日（日本時間の 0 時以降）にまたお試しください。"
-        return
+        return f"今日の相談回数の上限（{daily_limit()}回）に達しました。明日（日本時間の 0 時以降）にまたお試しください。"
     if quota is QuotaResult.UNAVAILABLE:
         # 数えられないときは、上限を守れないので呼ばない（費用の上限を優先する）
-        yield "ただいま相談を受け付けられません。時間をおいてもう一度お試しください。"
-        return
+        return "ただいま相談を受け付けられません。時間をおいてもう一度お試しください。"
+    return None
 
-    log.info("相談を受け付けました question=%s answered=%s", ctx.question_id, bool(ctx.selected))
-    for i, choice in enumerate(MODELS):
-        # 会話履歴は Agent が書き換えるため、モデルごとに作り直す
-        agent = _build_agent(ctx, _sanitize_history(payload.get("history")), choice)
-        started = False
+
+def _log_fallback(choice: ModelChoice, following: ModelChoice, error: Exception) -> None:
+    """次のモデルに回したことを 1 行の JSON で残す（アラームのメトリクスフィルターが拾う）。"""
+    entry = {
+        "fallback": True,
+        "from": choice.provider,
+        "fromModel": choice.model_id,
+        "to": following.provider,
+        "toModel": following.model_id,
+        "errorType": fallback_reason(error, choice.provider),
+        "message": str(error)[:300],
+    }
+    log.warning("[chat] fallback %s", json.dumps(entry, ensure_ascii=False))
+
+
+class _Stream:
+    """1 つのモデルの応答を流す。何か返したか（started）を呼び出し側が見て、次のモデルに回すかを決める。"""
+
+    def __init__(self, agent: Agent, choice: ModelChoice):
+        self.agent = agent
+        self.choice = choice
+        self.started = False
+
+    async def run(self, prompt: str):
         # ツールを呼ぶ前の前置きと呼んだ後の本文が改行なしでつながると、本文冒頭の見出し（##）が
         # Markdown として崩れるため、ツールを挟んで本文を再開するときは空行を入れる
         break_before_text = False
+        async for event in self.agent.stream_async(prompt):
+            if not isinstance(event, dict):
+                continue
+            if self.started and event.get("current_tool_use"):
+                break_before_text = True
+            data = event.get("data")
+            if isinstance(data, str) and data:
+                if break_before_text:
+                    yield "\n\n"
+                    break_before_text = False
+                self.started = True
+                yield data
+            result = event.get("result")
+            if result is not None:
+                _log_usage(self.choice, result)
+                if not self.started and getattr(result, "stop_reason", None) == "refusal":
+                    raise RefusalError("モデルが回答を断りました")
+
+
+async def _answer(ctx: QuestionContext, history: Any, prompt: str):
+    """MODELS の順に答えさせる。前のモデルが何も返さないうちに失敗したときだけ次のモデルで答え直す。"""
+    for i, choice in enumerate(MODELS):
+        # 会話履歴は Agent が書き換えるため、モデルごとに作り直す
+        stream = _Stream(_build_agent(ctx, _sanitize_history(history), choice), choice)
         try:
-            async for event in agent.stream_async(prompt):
-                if not isinstance(event, dict):
-                    continue
-                if started and event.get("current_tool_use"):
-                    break_before_text = True
-                data = event.get("data")
-                if isinstance(data, str) and data:
-                    if break_before_text:
-                        yield "\n\n"
-                        break_before_text = False
-                    started = True
-                    yield data
-                result = event.get("result")
-                if result is not None:
-                    _log_usage(choice, result)
-                    if not started and getattr(result, "stop_reason", None) == "refusal":
-                        raise RefusalError("モデルが回答を断りました")
+            async for chunk in stream.run(prompt):
+                yield chunk
             return
         except Exception as error:
             log.exception("エージェントの実行に失敗しました provider=%s model=%s", choice.provider, choice.model_id)
             # 途中まで返した後に別モデルでやり直すと文章が重複するため、切り替えるのは
             # まだ何も返していないときだけにする
-            if started or i == len(MODELS) - 1:
+            if stream.started or i == len(MODELS) - 1:
                 yield "\n\n（応答の生成中にエラーが発生しました。時間をおいてもう一度お試しください）"
                 return
-            following = MODELS[i + 1]
-            entry = {
-                "fallback": True,
-                "from": choice.provider,
-                "fromModel": choice.model_id,
-                "to": following.provider,
-                "toModel": following.model_id,
-                "errorType": fallback_reason(error, choice.provider),
-                "message": str(error)[:300],
-            }
-            log.warning("[chat] fallback %s", json.dumps(entry, ensure_ascii=False))
+            _log_fallback(choice, MODELS[i + 1], error)
+
+
+@app.entrypoint
+async def invoke(payload: Any, context: Any):
+    user = await asyncio.to_thread(verify_access_token, _authorization(context))
+    if not user:
+        log.warning("認証されていないリクエストを拒否しました")
+        yield "認証情報を確認できませんでした。ログインし直してからもう一度お試しください。"
+        return
+
+    try:
+        prompt = _validate_prompt(payload)
+        ctx = await asyncio.to_thread(resolve_question, payload)
+    except InvalidRequest as error:
+        yield str(error)
+        return
+
+    # モデルを呼ぶ直前に数える。入力の誤りや存在しない問題では回数を減らさない
+    refusal = _quota_refusal(await asyncio.to_thread(consume_quota, user))
+    if refusal:
+        yield refusal
+        return
+
+    log.info("相談を受け付けました question=%s answered=%s", ctx.question_id, bool(ctx.selected))
+    async for chunk in _answer(ctx, payload.get("history"), prompt):
+        yield chunk
 
 
 if __name__ == "__main__":

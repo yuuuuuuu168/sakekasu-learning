@@ -22,6 +22,12 @@ SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 QUESTION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 LABELS = string.ascii_uppercase
 
+
+
+class InvalidRequest(Exception):
+    """相談を受け付けられない入力。message はそのまま受験者に返す。"""
+
+
 _TTL_SECONDS = 300
 _cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
 _lock = threading.Lock()
@@ -85,24 +91,24 @@ class QuestionContext:
         )
 
 
-def resolve_question(payload: dict[str, Any]) -> QuestionContext | str:
-    """ペイロードを検証して問題の文脈を返す。不正ならエラーメッセージ（str）を返す。"""
+def resolve_question(payload: dict[str, Any]) -> QuestionContext:
+    """ペイロードを検証して問題の文脈を返す。不正なら InvalidRequest を投げる。"""
     category = payload.get("category")
     exam = payload.get("exam")
     question_id = payload.get("questionId")
     if not (isinstance(category, str) and SLUG.match(category)):
-        return "資格の指定が不正です。"
+        raise InvalidRequest("資格の指定が不正です。")
     if not (isinstance(exam, str) and SLUG.match(exam)):
-        return "資格の指定が不正です。"
+        raise InvalidRequest("資格の指定が不正です。")
     if not (isinstance(question_id, str) and QUESTION_ID.match(question_id)):
-        return "問題の指定が不正です。"
+        raise InvalidRequest("問題の指定が不正です。")
 
     exam_file = load_exam(category, exam)
     if not exam_file:
-        return "資格が見つかりませんでした。"
+        raise InvalidRequest("資格が見つかりませんでした。")
     index = next((i for i, q in enumerate(exam_file["questions"]) if q["id"] == question_id), None)
     if index is None:
-        return "問題が見つかりませんでした。"
+        raise InvalidRequest("問題が見つかりませんでした。")
     question = exam_file["questions"][index]
 
     n = len(question["choices"])

@@ -1,5 +1,7 @@
+import pytest
+
 import question_context
-from question_context import render_question, resolve_question
+from question_context import InvalidRequest, render_question, resolve_question
 
 EXAM = {
     "name": "Test Exam",
@@ -58,9 +60,13 @@ def test_render_answered():
 
 
 def test_invalid_input():
-    assert resolve_question(_payload(category="../etc")) == "資格の指定が不正です。"
-    assert resolve_question(_payload(questionId="Q 1")) == "問題の指定が不正です。"
-    assert resolve_question(_payload(questionId="Q-2")) == "問題が見つかりませんでした。"
+    for payload, message in [
+        (_payload(category="../etc"), "資格の指定が不正です。"),
+        (_payload(questionId="Q 1"), "問題の指定が不正です。"),
+        (_payload(questionId="Q-2"), "問題が見つかりませんでした。"),
+    ]:
+        with pytest.raises(InvalidRequest, match=message):
+            resolve_question(payload)
 
 
 def test_bad_display_order_falls_back():
