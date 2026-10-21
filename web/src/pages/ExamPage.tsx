@@ -1,5 +1,5 @@
 import { ArrowLeft, Play, RotateCcw } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { QuestionListResponse } from '../../../shared/types';
 import { MasteryBar } from '../components/MasteryBar';
@@ -7,28 +7,25 @@ import { ErrorMessage, Loading } from '../components/Status';
 import { api } from '../lib/api';
 import { shuffledOrder } from '../lib/choices';
 import { MASTERY_UI } from '../lib/mastery-ui';
+import { useApiResource } from '../lib/useApiResource';
 import { FILTERS, startSession, type StudyFilter, type StudyOrder } from '../lib/study-session';
 
 export function ExamPage() {
   const { category = '', exam = '' } = useParams();
   const navigate = useNavigate();
-  const [data, setData] = useState<QuestionListResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error, reload } = useApiResource<QuestionListResponse>(`${category}/${exam}`, () =>
+    api.questions(category, exam),
+  );
   const [filter, setFilter] = useState<StudyFilter>('all');
   const [order, setOrder] = useState<StudyOrder>('random');
-
-  const load = useCallback(() => {
-    setError(null);
-    api.questions(category, exam).then(setData, (err: Error) => setError(err.message));
-  }, [category, exam]);
-  useEffect(load, [load]);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   const targets = useMemo(
     () => data?.questions.filter((q) => FILTERS[filter].includes(q.mastery)).map((q) => q.id) ?? [],
     [data, filter],
   );
 
-  if (error) return <ErrorMessage message={error} onRetry={load} />;
+  if (error) return <ErrorMessage message={error} onRetry={reload} />;
   if (!data) return <Loading />;
 
   const questionPath = (id: string) => `/exams/${category}/${exam}/q/${encodeURIComponent(id)}`;
@@ -49,11 +46,13 @@ export function ExamPage() {
 
   const reset = async () => {
     if (!window.confirm(`${data.exam.name} の回答履歴をすべて消去します。よろしいですか？`)) return;
+    setResetError(null);
     try {
       await api.resetProgress(category, exam);
-      load();
+      reload();
     } catch (err) {
-      setError((err as Error).message);
+      // 一覧ごとエラー表示に替えず、ボタンの近くに出す
+      setResetError((err as Error).message);
     }
   };
 
@@ -115,6 +114,11 @@ export function ExamPage() {
             履歴をリセット
           </button>
         </div>
+        {resetError && (
+          <p role="alert" className="text-xs text-danger">
+            {resetError}
+          </p>
+        )}
         <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8">
           {data.questions.map((q) => (
             <button

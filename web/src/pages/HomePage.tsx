@@ -1,22 +1,15 @@
 import { ChevronRight } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import type { CatalogResponse } from '../../../shared/types';
 import { MasteryBar } from '../components/MasteryBar';
 import { ErrorMessage, Loading } from '../components/Status';
 import { api } from '../lib/api';
+import { useApiResource } from '../lib/useApiResource';
 
 export function HomePage() {
-  const [data, setData] = useState<CatalogResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error, reload } = useApiResource<CatalogResponse>('catalog', () => api.catalog());
 
-  const load = useCallback(() => {
-    setError(null);
-    api.catalog().then(setData, (err: Error) => setError(err.message));
-  }, []);
-  useEffect(load, [load]);
-
-  if (error) return <ErrorMessage message={error} onRetry={load} />;
+  if (error) return <ErrorMessage message={error} onRetry={reload} />;
   if (!data) return <Loading />;
   if (data.categories.length === 0) {
     return <p className="py-20 text-center text-muted">まだ問題が登録されていません</p>;
