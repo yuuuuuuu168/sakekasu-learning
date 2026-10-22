@@ -1,33 +1,35 @@
 # japanese-guard
 
-Claude Code の応答が英語に切り替わるのを止める Stop フックです。ターンの最終回答が英語主体なら、終了させずに日本語で書き直させます。動きと判定の調整（環境変数）は上流の README を参照してください。
+応答が英語に切り替わるのを止める Stop フック。ターンの最終回答が英語主体なら、
+終了させずに日本語で書き直させる。`.claude/settings.json` の `hooks.Stop` から呼ぶ。
 
-## 出どころ
+[minorun365/claude-code-japanese-guard](https://github.com/minorun365/claude-code-japanese-guard)
+のコミット `930f056` をそのまま同梱している（Apache License 2.0、`LICENSE` と `NOTICE` は上流のもの）。
+変えたのはテストが本体を探すパスだけ。上流を取り込み直すときは `japanese-guard.py` を丸ごと差し替える。
 
-- 上流: https://github.com/minorun365/claude-code-japanese-guard
-- コミット: [`930f05687d333b310740651f022c2b531b5a0aa7`](https://github.com/minorun365/claude-code-japanese-guard/tree/930f05687d333b310740651f022c2b531b5a0aa7)（2026-09-26）
-- ライセンス: Apache License 2.0（`LICENSE`、`NOTICE`）
+上流の README は `~/.claude/` に置く手順だが、クラウドセッションのコンテナは使い捨てで
+ホームに置いたものが次のセッションに残らないため、リポジトリに同梱して共有設定から呼ぶ。
 
-| このディレクトリ | 上流 | 変更 |
-|---|---|---|
-| `japanese-guard.py` | `hooks/japanese-guard.py` | なし |
-| `test_japanese_guard.py` | `tests/test_japanese_guard.py` | 本体を探すパス（`HOOK`）だけ、同じディレクトリを見るように変更 |
-| `LICENSE` / `NOTICE` | 同名 | なし |
+## 動かすのに要るもの
 
-## 入れ方
-
-上流の README は `~/.claude/` に置く手順ですが、クラウドのコンテナは使い捨てなので、リポジトリに同梱して `.claude/settings.json` の `hooks.Stop` から呼んでいます。
-
-```json
-{ "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/scripts/japanese-guard/japanese-guard.py" }
-```
-
-## 更新
-
-上流の `hooks/japanese-guard.py` と `tests/test_japanese_guard.py` を取り直し、テストの `HOOK` のパスを直してから、上のコミットを書き換えます。
+Python 3（標準ライブラリだけ）。クラウドVMには入っている。ローカルで Claude Code を
+使う場合も `python3` が PATH に要る。無いとフックがエラーを出すが、終了は止めない。
 
 ## テスト
 
-```bash
+```sh
 python3 scripts/japanese-guard/test_japanese_guard.py
 ```
+
+## 閾値
+
+| 環境変数 | 既定 | 意味 |
+| --- | --- | --- |
+| `JAPANESE_GUARD_MIN_LATIN` | `25` | 英字がこれ未満の本文は判定しない |
+| `JAPANESE_GUARD_RATIO` | `3` | 英字の数が日本語の文字数のこの倍を超えたら英語主体とみなす |
+
+## ほかの Stop フックとの関係
+
+別の Stop フック（AI-DLC の `aidlc-continue-workflow.ts` など）を足すと、両方が同時に止めたときに
+差し戻しの理由が2つまとめて届く。どちらかが止めた直後の終了では `stop_hook_active` が立つため、
+このフックはその1回を検査せずに通す（差し戻しは1ターン1回）。
