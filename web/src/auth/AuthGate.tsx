@@ -161,7 +161,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
 /**
  * 自動で進めなかったときだけ出るサインイン画面。見た目は sakekasu の入口の表紙（ポータルのトップ）と同じ。
- * OS がライトでもこの画面だけは黒に固定する（色は index.css の .signin で共通テーマの変数を局所的に上書き）
+ * OS がライトでもこの画面だけは黒に固定する（index.css の .signin に color-scheme: dark を付け、共通テーマのダークの値を使う）
  */
 function SignInScreen({ error, onSignIn }: { error: string | null; onSignIn: () => Promise<string | null> }) {
   const [busy, setBusy] = useState(false);
