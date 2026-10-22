@@ -58,13 +58,13 @@ body {
 /*
  * サインイン画面（auth/AuthGate.tsx の SignInScreen）。自動でマネージドログインへ進めなかったときだけ出る。
  * 見た目は sakekasu の入口の表紙（sakekasu-integrated_environment の infra/lib/portal.ts の top）と同じにする。
- * OS がライトでもこの画面だけは黒に固定する。共通テーマ（theme/sakekasu-theme.css）の --sk-* は
- * light-dark() で書いてあり、使う要素の color-scheme で値が決まるので、color-scheme: dark だけで
- * .signin の中がダークの値になる（値を書き写さない）。ログイン後の画面には効かない。
+ * OS がライトでもこの画面だけは黒に固定する。共通テーマ（theme/sakekasu-theme.css）の色は light-dark() で
+ * 書かれていて color-scheme で決まるので、.signin と、出している間の <html>（下の html:has(.signin)）を
+ * dark にする。ログイン後の画面には効かない。
  */
 .signin {
   color-scheme: dark;
-  /* 青海波。地の色の円の間に、金の線（透明度 0x40）を 3 重に引く */
+  /* 青海波。地の色の円の間に、金の線（ダークの gold-line #b8964f に透明度 0x40）を 3 重に引く */
   --signin-wave: radial-gradient(
     circle at 50% 100%,
     var(--sk-bg) 18%,
@@ -92,8 +92,14 @@ body {
   font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'YuGothic', 'Meiryo', 'Noto Sans JP',
     sans-serif;
 }
-/* 画面の外（iOS の引っぱりすぎた余白など）も黒にする。サインイン画面を出している間だけ */
-html:has(.signin) {
+/*
+ * 画面の外（iOS の引っぱりすぎた余白など）も黒にする。サインイン画面を出している間だけ。
+ * <html> の color-scheme も dark にする。Vite 8 の CSS の圧縮（lightningcss）は light-dark() を
+ * :root の color-scheme で決まる変数に書き換えるので、.signin の color-scheme だけでは中の --sk-* が
+ * ダークにならない。[data-theme] つきも並べるのは、共通テーマの :root[data-theme='light'] に詳細度で負けないため
+ */
+html:has(.signin),
+html:has(.signin)[data-theme] {
   background: #1a1a2e;
   color-scheme: dark;
 }
