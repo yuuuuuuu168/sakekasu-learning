@@ -3,17 +3,22 @@
  *
  * テーブル: PK=userId（Cognito の sub）, SK=qkey（"<category>/<exam>#<questionId>"）
  * 1問1アイテムで、直近 HISTORY_LIMIT 件の正誤だけを持つ。
+ *
+ * 同じテーブルに、演習の続きも資格ごとに 1 アイテム置く（SK="drill#<category>/<exam>"）。
+ * 回答履歴の SK（"<category>/<exam>#..."）とは前方一致しないので、履歴の集計やリセットには混ざらない。
  */
 import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   BatchWriteCommand,
+  DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
   QueryCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { HISTORY_LIMIT, masteryOf } from '../../../shared/mastery';
-import type { QuestionProgress } from '../../../shared/types';
+import type { Drill, QuestionProgress } from '../../../shared/types';
 import { HttpError } from './http-error';
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -28,6 +33,7 @@ interface ProgressItem {
 }
 
 export const examPrefix = (category: string, exam: string) => `${category}/${exam}#`;
+export const drillKey = (category: string, exam: string) => `drill#${category}/${exam}`;
 
 export function toProgress(id: string, item?: Pick<ProgressItem, 'history' | 'attempts' | 'lastAnsweredAt'>): QuestionProgress {
   const history = item?.history ?? [];
@@ -136,4 +142,66 @@ export async function resetExamProgress(userId: string, category: string, exam: 
     if (requests && requests.length > 0) throw new Error('履歴の削除を完了できませんでした');
   }
   return items.length;
+}
+
+/** 演習の続き。無ければ undefined */
+export async function getDrill(userId: string, category: string, exam: string): Promise<Drill | undefined> {
+  const res = await ddb.send(
+    new GetCommand({ TableName: TABLE, Key: { userId, qkey: drillKey(category, exam) } }),
+  );
+  if (!res.Item) return undefined;
+  const { id, filter, order, queue, current } = res.Item as Drill;
+  return { id, filter, order, queue, current };
+}
+
+/** 新しく演習を始める。前の演習の続きは上書きする */
+export async function putDrill(userId: string, category: string, exam: string, drill: Drill) {
+  await ddb.send(
+    new PutCommand({
+      TableName: TABLE,
+      Item: { userId, qkey: drillKey(category, exam), ...drill, updatedAt: new Date().toISOString() },
+    }),
+  );
+}
+
+/**
+ * 演習の次に解く問題を書き換える（current が null なら続きを消す）。
+ * 別の演習が始まっていた・current が並びに無いときは書かずに false を返す
+ */
+export async function updateDrill(
+  userId: string,
+  category: string,
+  exam: string,
+  id: string,
+  current: string | null,
+): Promise<boolean> {
+  const Key = { userId, qkey: drillKey(category, exam) };
+  try {
+    if (current === null) {
+      await ddb.send(
+        new DeleteCommand({
+          TableName: TABLE,
+          Key,
+          ConditionExpression: '#id = :id',
+          ExpressionAttributeNames: { '#id': 'id' },
+          ExpressionAttributeValues: { ':id': id },
+        }),
+      );
+    } else {
+      await ddb.send(
+        new UpdateCommand({
+          TableName: TABLE,
+          Key,
+          UpdateExpression: 'SET #current = :current, updatedAt = :now',
+          ConditionExpression: '#id = :id AND contains(#queue, :current)',
+          ExpressionAttributeNames: { '#id': 'id', '#current': 'current', '#queue': 'queue' },
+          ExpressionAttributeValues: { ':id': id, ':current': current, ':now': new Date().toISOString() },
+        }),
+      );
+    }
+    return true;
+  } catch (err) {
+    if (err instanceof ConditionalCheckFailedException) return false;
+    throw err;
+  }
 }

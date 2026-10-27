@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ExamFile } from '../../shared/types';
+import type { Drill, ExamFile } from '../../shared/types';
 
 const exam: ExamFile = {
   category: 'aws',
@@ -14,6 +14,7 @@ const exam: ExamFile = {
 };
 
 const store = new Map<string, { history: boolean[]; attempts: number; qkey: string }>();
+const drills = new Map<string, Drill>();
 
 /** 次の recordAnswer で投げる例外（競合の再現用） */
 let recordError: Error | null = null;
@@ -39,8 +40,19 @@ vi.mock('../lambda/api/questions', () => ({
 vi.mock('../lambda/api/progress', async () => {
   const { masteryOf } = await import('../../shared/mastery');
   const prefix = (c: string, e: string) => `${c}/${e}#`;
+  const drillKey = (c: string, e: string) => `drill#${c}/${e}`;
   return {
     examPrefix: prefix,
+    drillKey,
+    getDrill: async (_u: string, c: string, e: string) => drills.get(drillKey(c, e)),
+    putDrill: async (_u: string, c: string, e: string, drill: Drill) => void drills.set(drillKey(c, e), drill),
+    updateDrill: async (_u: string, c: string, e: string, id: string, current: string | null) => {
+      const drill = drills.get(drillKey(c, e));
+      if (!drill || drill.id !== id || (current !== null && !drill.queue.includes(current))) return false;
+      if (current === null) drills.delete(drillKey(c, e));
+      else drills.set(drillKey(c, e), { ...drill, current });
+      return true;
+    },
     toProgress: (id: string, item?: { history: boolean[]; attempts: number }) => ({
       id,
       mastery: masteryOf(item?.history ?? []),
@@ -48,7 +60,7 @@ vi.mock('../lambda/api/progress', async () => {
       history: item?.history ?? [],
     }),
     getProgress: async (_u: string, c: string, e: string, id: string) => store.get(`${prefix(c, e)}${id}`),
-    listAllProgress: async () => [...store.values()],
+    listAllProgress: async () => [...store.values(), ...[...drills.keys()].map((qkey) => ({ qkey }))],
     listExamProgress: async (_u: string, c: string, e: string) =>
       new Map([...store.values()].map((v) => [v.qkey.slice(prefix(c, e).length), v])),
     recordAnswer: async (_u: string, c: string, e: string, id: string, correct: boolean) => {
@@ -88,7 +100,10 @@ async function call(e: APIGatewayProxyEventV2WithJWTAuthorizer) {
 const q = (id: string) => ({ category: 'aws', exam: 'dop-c02', id });
 
 describe('API', () => {
-  beforeEach(() => store.clear());
+  beforeEach(() => {
+    store.clear();
+    drills.clear();
+  });
 
   it('sub が無ければ 401', async () => {
     expect((await call(event('GET /catalog', {}, undefined, ''))).status).toBe(401);
@@ -178,5 +193,60 @@ describe('API', () => {
     loadExam.mockClear();
     await expect(handler({ warmup: true })).resolves.toBeUndefined();
     expect(loadExam).toHaveBeenCalledWith('aws', 'dop-c02');
+  });
+
+  describe('演習の続き', () => {
+    const route = (method: string) => `${method} /exams/{category}/{exam}/drill`;
+    const examPath = q('');
+
+    it('始めた演習を問題一覧とカタログで返し、進めた位置を残す', async () => {
+      const started = await call(event(route('PUT'), examPath, { filter: 'review', order: 'sequential', queue: ['Q-2', 'Q-1'] }));
+      expect(started.status).toBe(200);
+      expect(started.body).toMatchObject({ filter: 'review', order: 'sequential', queue: ['Q-2', 'Q-1'], current: 'Q-2' });
+      const { id } = started.body as Drill;
+
+      const moved = await call(event(route('PATCH'), examPath, { id, current: 'Q-1' }));
+      expect(moved.body).toEqual({ updated: true });
+      const list = await call(event('GET /exams/{category}/{exam}/questions', examPath));
+      expect(list.body.drill).toMatchObject({ id, current: 'Q-1' });
+      const catalog = await call(event('GET /catalog'));
+      expect(catalog.body.categories[0].exams[0].drill).toBe(true);
+
+      // 古い演習の ID や並びに無い問題では書き換えない
+      expect((await call(event(route('PATCH'), examPath, { id: 'old', current: 'Q-2' }))).body).toEqual({ updated: false });
+      expect((await call(event(route('PATCH'), examPath, { id, current: 'Q-9' }))).body).toEqual({ updated: false });
+
+      // 終えたら続きを消す
+      expect((await call(event(route('PATCH'), examPath, { id, current: null }))).body).toEqual({ updated: true });
+      expect((await call(event('GET /exams/{category}/{exam}/questions', examPath))).body.drill).toBeNull();
+      expect((await call(event('GET /catalog'))).body.categories[0].exams[0].drill).toBe(false);
+    });
+
+    it('削除された問題は並びから外し、その先の問題から再開させる', async () => {
+      drills.set('drill#aws/dop-c02', { id: 'd', filter: 'all', order: 'random', queue: ['Q-1', 'Q-8', 'Q-2'], current: 'Q-8' });
+      const list = await call(event('GET /exams/{category}/{exam}/questions', examPath));
+      expect(list.body.drill).toMatchObject({ queue: ['Q-1', 'Q-2'], current: 'Q-2' });
+
+      drills.set('drill#aws/dop-c02', { id: 'd', filter: 'all', order: 'random', queue: ['Q-1', 'Q-8', 'Q-9'], current: 'Q-8' });
+      expect((await call(event('GET /exams/{category}/{exam}/questions', examPath))).body.drill).toBeNull();
+    });
+
+    it('不正な条件や並びは 400', async () => {
+      for (const body of [
+        { filter: 'nope', order: 'random', queue: ['Q-1'] },
+        { filter: 'all', order: 'nope', queue: ['Q-1'] },
+        { filter: 'all', order: 'random', queue: [] },
+        { filter: 'all', order: 'random', queue: ['Q-9'] },
+        { filter: 'all', order: 'random', queue: ['Q-1', 'Q-1'] },
+        { filter: 'all', order: 'random', queue: 'Q-1' },
+        null,
+      ]) {
+        expect((await call(event(route('PUT'), examPath, body))).status).toBe(400);
+      }
+      for (const body of [{ current: 'Q-1' }, { id: 'd', current: 1 }, { id: 'd' }, null]) {
+        expect((await call(event(route('PATCH'), examPath, body))).status).toBe(400);
+      }
+      expect(drills.size).toBe(0);
+    });
   });
 });

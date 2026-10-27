@@ -8,16 +8,7 @@ import { api } from '../lib/api';
 import { shuffledOrder } from '../lib/choices';
 import { MASTERY_UI } from '../lib/mastery-ui';
 import { useApiResource } from '../lib/useApiResource';
-import {
-  FILTERS,
-  ORDERS,
-  resumeDrill,
-  savedDrill,
-  startDrill,
-  startSession,
-  type StudyFilter,
-  type StudyOrder,
-} from '../lib/study-session';
+import { FILTERS, ORDERS, startSession, type StudyFilter, type StudyOrder } from '../lib/study-session';
 
 export function ExamPage() {
   const { category = '', exam = '' } = useParams();
@@ -28,6 +19,7 @@ export function ExamPage() {
   const [filter, setFilter] = useState<StudyFilter>('all');
   const [order, setOrder] = useState<StudyOrder>('random');
   const [resetError, setResetError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
 
   const targets = useMemo(
     () => data?.questions.filter((q) => FILTERS[filter].includes(q.mastery)).map((q) => q.id) ?? [],
@@ -38,22 +30,27 @@ export function ExamPage() {
   if (!data) return <Loading />;
 
   const questionPath = (id: string) => `/exams/${category}/${exam}/q/${encodeURIComponent(id)}`;
-  const drill = savedDrill(category, exam);
+  const { drill } = data;
 
-  const start = () => {
+  const start = async () => {
     const queue = order === 'random' ? shuffledOrder(targets.length).map((i) => targets[i]) : targets;
     if (queue.length === 0) return;
     if (drill && !window.confirm('途中の演習の続きは消えます。新しく始めますか？')) return;
-    startDrill(category, exam, queue, filter, order);
+    setStarting(true);
+    let drillId: string | undefined;
+    try {
+      drillId = (await api.startDrill(category, exam, { filter, order, queue })).id;
+    } catch {
+      // 続きを残せなくても演習は解ける（「次の問題へ」はタブの並びでたどる）
+    }
+    startSession(category, exam, queue, drillId);
     navigate(questionPath(queue[0]));
   };
 
   const resume = () => {
-    const ids = new Set(data.questions.map((q) => q.id));
-    const id = resumeDrill(category, exam, (q) => ids.has(q));
-    // 残りの問題がすべて削除されていたら続きは消えるので、描き直して再開の案内を消す
-    if (id) navigate(questionPath(id));
-    else reload();
+    if (!drill) return;
+    startSession(category, exam, drill.queue, drill.id);
+    navigate(questionPath(drill.current));
   };
 
   const openQuestion = (id: string) => {
@@ -140,8 +137,8 @@ export function ExamPage() {
           </div>
         </div>
         <button
-          onClick={start}
-          disabled={targets.length === 0}
+          onClick={() => void start()}
+          disabled={targets.length === 0 || starting}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 font-semibold text-on-fill hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
         >
           <Play className="size-4" />

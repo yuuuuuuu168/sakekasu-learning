@@ -1,5 +1,5 @@
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
-import { BatchWriteCommand, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { BatchWriteCommand, DeleteCommand, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const send = vi.fn();
@@ -10,7 +10,7 @@ vi.mock('@aws-sdk/lib-dynamodb', async (importOriginal) => {
 });
 
 process.env.PROGRESS_TABLE_NAME = 'progress';
-const { recordAnswer, resetExamProgress } = await import('../lambda/api/progress');
+const { recordAnswer, resetExamProgress, updateDrill } = await import('../lambda/api/progress');
 const { HttpError } = await import('../lambda/api/http-error');
 
 const conflict = () => new ConditionalCheckFailedException({ message: 'conflict', $metadata: {} });
@@ -106,5 +106,32 @@ describe('resetExamProgress', () => {
     });
     await expect(resetExamProgress('u', 'aws', 'dop-c02')).rejects.toThrow('履歴の削除を完了できませんでした');
     expect(send.mock.calls.filter(([c]) => c instanceof BatchWriteCommand)).toHaveLength(5);
+  });
+});
+
+describe('updateDrill', () => {
+  it('同じ演習で、並びにある問題のときだけ書き換える', async () => {
+    send.mockResolvedValue({});
+    expect(await updateDrill('u', 'aws', 'dop-c02', 'd-1', 'Q-2')).toBe(true);
+    const update = send.mock.calls[0][0] as UpdateCommand;
+    expect(update).toBeInstanceOf(UpdateCommand);
+    expect(update.input.Key).toEqual({ userId: 'u', qkey: 'drill#aws/dop-c02' });
+    expect(update.input.ConditionExpression).toBe('#id = :id AND contains(#queue, :current)');
+    expect(update.input.ExpressionAttributeValues).toMatchObject({ ':id': 'd-1', ':current': 'Q-2' });
+  });
+
+  it('終えたら同じ演習のときだけ消す', async () => {
+    send.mockResolvedValue({});
+    expect(await updateDrill('u', 'aws', 'dop-c02', 'd-1', null)).toBe(true);
+    const del = send.mock.calls[0][0] as DeleteCommand;
+    expect(del).toBeInstanceOf(DeleteCommand);
+    expect(del.input.ConditionExpression).toBe('#id = :id');
+  });
+
+  it('条件に合わなければ false、それ以外の失敗は投げる', async () => {
+    send.mockRejectedValueOnce(conflict());
+    expect(await updateDrill('u', 'aws', 'dop-c02', 'old', 'Q-2')).toBe(false);
+    send.mockRejectedValueOnce(new Error('boom'));
+    await expect(updateDrill('u', 'aws', 'dop-c02', 'd-1', 'Q-2')).rejects.toThrow('boom');
   });
 });

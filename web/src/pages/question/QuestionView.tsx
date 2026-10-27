@@ -8,7 +8,7 @@ import { MasteryChip } from '../../components/MasteryBar';
 import { toggleSelection } from '../../lib/answer';
 import { api } from '../../lib/api';
 import { shuffledOrder } from '../../lib/choices';
-import { markAnswered, markOpened, nextInSession } from '../../lib/study-session';
+import { drillProgress, nextInSession } from '../../lib/study-session';
 import { ChoiceList } from './ChoiceList';
 import { DiagramZoomDialog } from './DiagramZoomDialog';
 import { ExplanationList } from './ExplanationList';
@@ -51,7 +51,7 @@ export function QuestionView({
 
   // 演習の途中で一覧やトップへ戻っても、この問題から再開できるようにする
   useEffect(() => {
-    markOpened(category, exam, id);
+    saveDrillProgress(category, exam, id, false);
   }, [category, exam, id]);
 
   const multi = question.selectCount > 1;
@@ -74,7 +74,7 @@ export function QuestionView({
     setSubmitError(null);
     try {
       setResult(await api.answer(category, exam, id, selected));
-      markAnswered(category, exam, id);
+      saveDrillProgress(category, exam, id, true);
     } catch (err) {
       // 画面ごと差し替えず、選んだ選択肢を残したまま送り直せるようにする
       setSubmitError((err as Error).message);
@@ -182,4 +182,10 @@ export function QuestionView({
       />
     </div>
   );
+}
+
+/** 演習の続きの位置をサーバーに残す。失敗しても解くのは続けられるので、待たずに捨てる */
+function saveDrillProgress(category: string, exam: string, id: string, answered: boolean) {
+  const body = drillProgress(category, exam, id, answered);
+  if (body) api.updateDrill(category, exam, body).catch(() => {});
 }

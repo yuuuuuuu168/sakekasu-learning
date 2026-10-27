@@ -3,6 +3,7 @@
  * API の入出力を変えるときはここを直し、両側の型チェックで追従漏れを検出する。
  */
 
+import type { DrillFilter, DrillOrder } from './drill';
 import type { Mastery } from './mastery';
 
 /** 問題ビルドが出力する1問分（非公開バケットにだけ置く。正解と解説を含む） */
@@ -60,7 +61,11 @@ export type MasteryCounts = Record<Mastery, number>;
 /** GET /catalog */
 export interface CatalogResponse {
   categories: (Omit<CategorySummary, 'exams'> & {
-    exams: (ExamSummary & { mastery: MasteryCounts })[];
+    exams: (ExamSummary & {
+      mastery: MasteryCounts;
+      /** 続きから再開できる演習があるか */
+      drill: boolean;
+    })[];
   })[];
 }
 
@@ -85,6 +90,47 @@ export interface QuestionListResponse {
   exam: ExamSummary;
   mastery: MasteryCounts;
   questions: (QuestionProgress & { number: QuestionNumber })[];
+  /** 続きから再開できる演習。無ければ null */
+  drill: Drill | null;
+}
+
+/**
+ * 演習（「演習を始める」から始めた問題の並び）の続き。資格ごとに 1 つだけ持つ。
+ * 問題一覧の応答では、削除された問題を queue から外し、current も残っている問題に合わせて返す
+ */
+export interface Drill {
+  /** 演習を見分ける ID。新しく始めると替わり、古い演習の画面からの更新を弾く */
+  id: string;
+  filter: DrillFilter;
+  order: DrillOrder;
+  /** 出題する問題 ID の並び */
+  queue: string[];
+  /** 次に解く問題 ID（開いたが答えていない問題、または最後に答えた問題の次） */
+  current: string;
+}
+
+/** PUT /exams/{category}/{exam}/drill のリクエスト（新しく演習を始める。前の演習の続きは消える） */
+export interface StartDrillRequest {
+  filter: DrillFilter;
+  order: DrillOrder;
+  queue: string[];
+}
+
+/** PUT /exams/{category}/{exam}/drill のレスポンス */
+export type StartDrillResponse = Drill;
+
+/** PATCH /exams/{category}/{exam}/drill のリクエスト（どこまで進んだかを残す） */
+export interface UpdateDrillRequest {
+  /** 更新する演習の ID。別の演習が始まっていたら更新しない */
+  id: string;
+  /** 次に解く問題 ID。null なら演習を終えたので続きを消す */
+  current: string | null;
+}
+
+/** PATCH /exams/{category}/{exam}/drill のレスポンス */
+export interface UpdateDrillResponse {
+  /** 更新したか。別の演習が始まっていた・current が並びに無いときは false */
+  updated: boolean;
 }
 
 /** GET /exams/{category}/{exam}/questions/{id}（正解・解説は含まない） */

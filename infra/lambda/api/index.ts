@@ -7,6 +7,8 @@
  * POST   /exams/{category}/{exam}/questions/{id}/answer  採点して記録し、正解と解説を返す
  * GET    /exams/{category}/{exam}/questions/{id}/diagrams/{choice}  選択肢の図解（回答済みの問題だけ）
  * DELETE /exams/{category}/{exam}/progress               資格1つ分の履歴を消す
+ * PUT    /exams/{category}/{exam}/drill                  演習を始め、続きを残す
+ * PATCH  /exams/{category}/{exam}/drill                  演習をどこまで進めたかを残す
  *
  * API とは別に、EventBridge のスケジュールから { warmup: true } で数分おきに呼ばれる。
  * 1 問を考えている間に実行環境が回収され、「回答する」がコールドスタートと問題 JSON の
@@ -21,25 +23,37 @@ import type {
 } from 'aws-lambda';
 import { QUESTION_ID, SLUG } from '../../../shared/ids';
 import { emptyMasteryCounts, isCorrect, masteryOf } from '../../../shared/mastery';
+import { randomUUID } from 'node:crypto';
+import { DRILL_FILTERS, DRILL_ORDERS } from '../../../shared/drill';
 import type {
   AnswerRequest,
   AnswerResponse,
   ApiErrorResponse,
   CatalogResponse,
   DiagramResponse,
+  Drill,
+  ExamFile,
   QuestionDetailResponse,
   QuestionListResponse,
   ResetProgressResponse,
+  StartDrillRequest,
+  StartDrillResponse,
+  UpdateDrillRequest,
+  UpdateDrillResponse,
 } from '../../../shared/types';
 import { HttpError } from './http-error';
 import {
+  drillKey,
   examPrefix,
+  getDrill,
   getProgress,
   listAllProgress,
   listExamProgress,
+  putDrill,
   recordAnswer,
   resetExamProgress,
   toProgress,
+  updateDrill,
 } from './progress';
 import { loadCatalog, loadDiagram, loadExam } from './questions';
 
@@ -100,7 +114,8 @@ async function getCatalog(userId: string): Promise<CatalogResponse> {
         // 問題を削除した後も履歴は残るため、未回答数が負にならないよう丸める
         const answered = mastery.mastered + mastery.shaky + mastery.weak;
         mastery.unanswered = Math.max(0, exam.questionCount - answered);
-        return { ...exam, mastery };
+        const drill = items.some((item) => item.qkey === drillKey(exam.category, exam.exam));
+        return { ...exam, mastery, drill };
       }),
     })),
   };
@@ -108,9 +123,10 @@ async function getCatalog(userId: string): Promise<CatalogResponse> {
 
 async function getQuestionList(event: Event, userId: string): Promise<QuestionListResponse> {
   const { category, exam, file } = await requireExam(event);
-  const [catalog, progressMap] = await Promise.all([
+  const [catalog, progressMap, drill] = await Promise.all([
     loadCatalog(),
     listExamProgress(userId, category, exam),
+    getDrill(userId, category, exam),
   ]);
   const summary = catalog.categories
     .find((c) => c.category === category)
@@ -129,7 +145,60 @@ async function getQuestionList(event: Event, userId: string): Promise<QuestionLi
     mastery[progress.mastery]++;
     return { ...progress, number: i + 1 };
   });
-  return { exam: summary, mastery, questions };
+  return { exam: summary, mastery, questions, drill: resumableDrill(drill, file) };
+}
+
+/**
+ * 問題が削除されていたら並びから外し、次に解く問題が無くなっていたらその先の問題に合わせる。
+ * 残りの問題がすべて無くなっていたら再開できないので null
+ */
+function resumableDrill(drill: Drill | undefined, file: ExamFile): Drill | null {
+  if (!drill) return null;
+  const exists = new Set(file.questions.map((q) => q.id));
+  const start = drill.queue.indexOf(drill.current);
+  const rest = drill.queue.slice(Math.max(0, start)).filter((id) => exists.has(id));
+  if (rest.length === 0) return null;
+  return { ...drill, queue: drill.queue.filter((id) => exists.has(id)), current: rest[0] };
+}
+
+function parseBody(event: Event): unknown {
+  const body = event.isBase64Encoded && event.body
+    ? Buffer.from(event.body, 'base64').toString('utf8')
+    : event.body;
+  try {
+    return JSON.parse(body ?? '');
+  } catch {
+    throw new HttpError(400, 'リクエストの形式が不正です');
+  }
+}
+
+async function startDrill(event: Event, userId: string): Promise<StartDrillResponse> {
+  const { category, exam, file } = await requireExam(event);
+  const { filter, order, queue } = (parseBody(event) ?? {}) as Partial<StartDrillRequest>;
+  if (!DRILL_FILTERS.includes(filter as never) || !DRILL_ORDERS.includes(order as never)) {
+    throw new HttpError(400, '出題の条件が不正です');
+  }
+  const exists = new Set(file.questions.map((q) => q.id));
+  if (
+    !Array.isArray(queue) ||
+    queue.length === 0 ||
+    !queue.every((id) => typeof id === 'string' && exists.has(id)) ||
+    new Set(queue).size !== queue.length
+  ) {
+    throw new HttpError(400, '問題の並びが不正です');
+  }
+  const drill: Drill = { id: randomUUID(), filter: filter!, order: order!, queue, current: queue[0] };
+  await putDrill(userId, category, exam, drill);
+  return drill;
+}
+
+async function patchDrill(event: Event, userId: string): Promise<UpdateDrillResponse> {
+  const { category, exam } = await requireExam(event);
+  const { id, current } = (parseBody(event) ?? {}) as Partial<UpdateDrillRequest>;
+  if (typeof id !== 'string' || !id || (current !== null && typeof current !== 'string')) {
+    throw new HttpError(400, '演習の指定が不正です');
+  }
+  return { updated: await updateDrill(userId, category, exam, id, current) };
 }
 
 async function getQuestion(event: Event, userId: string): Promise<QuestionDetailResponse> {
@@ -146,13 +215,7 @@ async function getQuestion(event: Event, userId: string): Promise<QuestionDetail
   };
 }
 
-function parseAnswer(body: string | undefined, choiceCount: number): number[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(body ?? '');
-  } catch {
-    throw new HttpError(400, 'リクエストの形式が不正です');
-  }
+function parseAnswer(parsed: unknown, choiceCount: number): number[] {
   const selected = (parsed as Partial<AnswerRequest>)?.selected;
   if (
     !Array.isArray(selected) ||
@@ -168,10 +231,7 @@ function parseAnswer(body: string | undefined, choiceCount: number): number[] {
 
 async function postAnswer(event: Event, userId: string): Promise<AnswerResponse> {
   const { category, exam, id, question } = await requireQuestion(event);
-  const body = event.isBase64Encoded && event.body
-    ? Buffer.from(event.body, 'base64').toString('utf8')
-    : event.body;
-  const selected = parseAnswer(body, question.choices.length);
+  const selected = parseAnswer(parseBody(event), question.choices.length);
   const correct = isCorrect(selected, question.answers);
   const item = await recordAnswer(userId, category, exam, id, correct);
   return {
@@ -241,6 +301,10 @@ async function route(event: Event): Promise<APIGatewayProxyResultV2> {
         const res: ResetProgressResponse = { deleted: await resetExamProgress(userId, category, exam) };
         return json(200, res);
       }
+      case 'PUT /exams/{category}/{exam}/drill':
+        return json(200, await startDrill(event, userId));
+      case 'PATCH /exams/{category}/{exam}/drill':
+        return json(200, await patchDrill(event, userId));
       default:
         return errorJson(404, 'not found');
     }
