@@ -133,6 +133,8 @@ export class BackendStack extends Stack {
         allowMethods: [
           apigw.CorsHttpMethod.GET,
           apigw.CorsHttpMethod.POST,
+          apigw.CorsHttpMethod.PUT,
+          apigw.CorsHttpMethod.PATCH,
           apigw.CorsHttpMethod.DELETE,
         ],
         allowHeaders: ['authorization', 'content-type'],
@@ -149,6 +151,8 @@ export class BackendStack extends Stack {
       ['/exams/{category}/{exam}/questions/{id}/answer', apigw.HttpMethod.POST],
       ['/exams/{category}/{exam}/questions/{id}/diagrams/{choice}', apigw.HttpMethod.GET],
       ['/exams/{category}/{exam}/progress', apigw.HttpMethod.DELETE],
+      ['/exams/{category}/{exam}/drill', apigw.HttpMethod.PUT],
+      ['/exams/{category}/{exam}/drill', apigw.HttpMethod.PATCH],
     ];
     for (const [routePath, method] of routes) {
       this.httpApi.addRoutes({ path: routePath, methods: [method], integration });

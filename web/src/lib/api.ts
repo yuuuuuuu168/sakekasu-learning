@@ -7,6 +7,10 @@ import type {
   QuestionDetailResponse,
   QuestionListResponse,
   ResetProgressResponse,
+  StartDrillRequest,
+  StartDrillResponse,
+  UpdateDrillRequest,
+  UpdateDrillResponse,
 } from '../../../shared/types';
 import { config } from '../config';
 
@@ -81,4 +85,8 @@ export const api = {
     ),
   resetProgress: (category: string, exam: string) =>
     request<ResetProgressResponse>('DELETE', `${examPath(category, exam)}/progress`),
+  startDrill: (category: string, exam: string, body: StartDrillRequest) =>
+    request<StartDrillResponse>('PUT', `${examPath(category, exam)}/drill`, body),
+  updateDrill: (category: string, exam: string, body: UpdateDrillRequest) =>
+    request<UpdateDrillResponse>('PATCH', `${examPath(category, exam)}/drill`, body),
 };

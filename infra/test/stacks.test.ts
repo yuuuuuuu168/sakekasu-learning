@@ -92,7 +92,7 @@ describe('stacks', () => {
 
   it('全ルートに JWT オーソライザーを付ける', () => {
     const routes = t.backend.findResources('AWS::ApiGatewayV2::Route');
-    expect(Object.keys(routes)).toHaveLength(6);
+    expect(Object.keys(routes)).toHaveLength(8);
     for (const route of Object.values(routes)) {
       expect(route.Properties.AuthorizationType).toBe('JWT');
     }

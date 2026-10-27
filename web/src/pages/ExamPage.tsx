@@ -1,4 +1,4 @@
-import { ArrowLeft, Play, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Play, RotateCcw, StepForward } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { QuestionListResponse } from '../../../shared/types';
@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { shuffledOrder } from '../lib/choices';
 import { MASTERY_UI } from '../lib/mastery-ui';
 import { useApiResource } from '../lib/useApiResource';
-import { FILTERS, startSession, type StudyFilter, type StudyOrder } from '../lib/study-session';
+import { FILTERS, ORDERS, startSession, type StudyFilter, type StudyOrder } from '../lib/study-session';
 
 export function ExamPage() {
   const { category = '', exam = '' } = useParams();
@@ -19,22 +19,44 @@ export function ExamPage() {
   const [filter, setFilter] = useState<StudyFilter>('all');
   const [order, setOrder] = useState<StudyOrder>('random');
   const [resetError, setResetError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  /** 番号順のときに、何番の問題から出すか（空なら最初から） */
+  const [from, setFrom] = useState('');
+  const fromNumber = order === 'sequential' ? Math.max(1, Math.trunc(Number(from)) || 1) : 1;
 
   const targets = useMemo(
-    () => data?.questions.filter((q) => FILTERS[filter].includes(q.mastery)).map((q) => q.id) ?? [],
-    [data, filter],
+    () =>
+      data?.questions
+        .filter((q) => FILTERS[filter].includes(q.mastery) && q.number >= fromNumber)
+        .map((q) => q.id) ?? [],
+    [data, filter, fromNumber],
   );
 
   if (error) return <ErrorMessage message={error} onRetry={reload} />;
   if (!data) return <Loading />;
 
   const questionPath = (id: string) => `/exams/${category}/${exam}/q/${encodeURIComponent(id)}`;
+  const { drill } = data;
 
-  const start = () => {
+  const start = async () => {
     const queue = order === 'random' ? shuffledOrder(targets.length).map((i) => targets[i]) : targets;
     if (queue.length === 0) return;
-    startSession(category, exam, queue);
+    if (drill && !window.confirm('途中の演習の続きは消えます。新しく始めますか？')) return;
+    setStarting(true);
+    let drillId: string | undefined;
+    try {
+      drillId = (await api.startDrill(category, exam, { filter, order, queue })).id;
+    } catch {
+      // 続きを残せなくても演習は解ける（「次の問題へ」はタブの並びでたどる）
+    }
+    startSession(category, exam, queue, drillId);
     navigate(questionPath(queue[0]));
+  };
+
+  const resume = () => {
+    if (!drill) return;
+    startSession(category, exam, drill.queue, drill.id);
+    navigate(questionPath(drill.current));
   };
 
   const openQuestion = (id: string) => {
@@ -79,6 +101,27 @@ export function ExamPage() {
 
       <section className="space-y-4 rounded-2xl border border-grid bg-surface p-5 shadow-sm">
         <h2 className="font-semibold">演習を始める</h2>
+        {drill && (
+          <div className="flex flex-col gap-3 rounded-xl bg-plane p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm">
+              <p className="font-semibold">途中の演習があります</p>
+              <p className="text-muted">
+                {FILTERS[drill.filter].label}・{ORDERS[drill.order]}　
+                <span className="tabular-nums">
+                  {drill.queue.indexOf(drill.current) + 1} / {drill.queue.length}
+                </span>{' '}
+                問目から
+              </p>
+            </div>
+            <button
+              onClick={resume}
+              className="flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 font-semibold text-on-fill hover:bg-accent-hover"
+            >
+              <StepForward className="size-4" />
+              続きから解く
+            </button>
+          </div>
+        )}
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted">出題する問題</p>
           <div className="flex flex-wrap gap-2">
@@ -92,13 +135,32 @@ export function ExamPage() {
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted">出題順</p>
           <div className="flex flex-wrap gap-2">
-            <button className={option(order === 'random')} onClick={() => setOrder('random')}>ランダム</button>
-            <button className={option(order === 'sequential')} onClick={() => setOrder('sequential')}>番号順</button>
+            {(Object.keys(ORDERS) as StudyOrder[]).map((o) => (
+              <button key={o} className={option(order === o)} onClick={() => setOrder(o)}>
+                {ORDERS[o]}
+              </button>
+            ))}
           </div>
+          {order === 'sequential' && (
+            <label className="flex items-center gap-2 text-sm text-ink-2">
+              問
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={data.questions.length}
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                placeholder="1"
+                className="w-20 rounded-lg bg-surface px-2 py-1.5 text-right tabular-nums ring-1 ring-grid focus:outline-none focus:ring-accent"
+              />
+              から出題する
+            </label>
+          )}
         </div>
         <button
-          onClick={start}
-          disabled={targets.length === 0}
+          onClick={() => void start()}
+          disabled={targets.length === 0 || starting}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 font-semibold text-on-fill hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
         >
           <Play className="size-4" />

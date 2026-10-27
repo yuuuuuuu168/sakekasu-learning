@@ -1,5 +1,5 @@
 import { ArrowLeft, MessageCircle } from 'lucide-react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import type { AnswerResponse, QuestionDetailResponse } from '../../../../shared/types';
 import { ChatPanel } from '../../components/ChatPanel';
@@ -8,7 +8,7 @@ import { MasteryChip } from '../../components/MasteryBar';
 import { toggleSelection } from '../../lib/answer';
 import { api } from '../../lib/api';
 import { shuffledOrder } from '../../lib/choices';
-import { nextInSession } from '../../lib/study-session';
+import { drillProgress, nextInSession } from '../../lib/study-session';
 import { ChoiceList } from './ChoiceList';
 import { DiagramZoomDialog } from './DiagramZoomDialog';
 import { ExplanationList } from './ExplanationList';
@@ -49,6 +49,11 @@ export function QuestionView({
     articleRef.current?.scrollIntoView({ block: 'start' });
   }, []);
 
+  // 演習の途中で一覧やトップへ戻っても、この問題から再開できるようにする
+  useEffect(() => {
+    saveDrillProgress(category, exam, id, false);
+  }, [category, exam, id]);
+
   const multi = question.selectCount > 1;
   const session = nextInSession(category, exam, id);
   const examPath = `/exams/${category}/${exam}`;
@@ -69,6 +74,7 @@ export function QuestionView({
     setSubmitError(null);
     try {
       setResult(await api.answer(category, exam, id, selected));
+      saveDrillProgress(category, exam, id, true);
     } catch (err) {
       // 画面ごと差し替えず、選んだ選択肢を残したまま送り直せるようにする
       setSubmitError((err as Error).message);
@@ -176,4 +182,10 @@ export function QuestionView({
       />
     </div>
   );
+}
+
+/** 演習の続きの位置をサーバーに残す。失敗しても解くのは続けられるので、待たずに捨てる */
+function saveDrillProgress(category: string, exam: string, id: string, answered: boolean) {
+  const body = drillProgress(category, exam, id, answered);
+  if (body) api.updateDrill(category, exam, body).catch(() => {});
 }

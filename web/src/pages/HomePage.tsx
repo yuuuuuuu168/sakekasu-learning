@@ -42,6 +42,9 @@ export function HomePage() {
                     <ChevronRight className="size-5 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-accent" />
                   </div>
                   <div className="space-y-2">
+                    {exam.drill && (
+                      <p className="text-xs font-semibold text-accent">途中の演習があります</p>
+                    )}
                     <p className="text-xs text-muted">
                       回答済み <span className="font-semibold text-ink-2">{answered}</span> / {exam.questionCount} 問
                     </p>

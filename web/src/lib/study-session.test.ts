@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { nextInSession, startSession } from './study-session';
+import { drillProgress, nextInSession, startSession } from './study-session';
 
 function fakeStorage() {
   const items = new Map<string, string>();
@@ -50,5 +50,20 @@ describe('study-session', () => {
     });
     expect(() => startSession('aws', 'dop', ['Q-1'])).not.toThrow();
     expect(nextInSession('aws', 'dop', 'Q-1')).toEqual({ inSession: false, next: null });
+    expect(drillProgress('aws', 'dop', 'Q-1', true)).toBeNull();
+  });
+
+  it('演習の中では、開いた問題・答えた問題の次を続きの位置として送る', () => {
+    startSession('aws', 'dop', ['Q-1', 'Q-2'], 'd-1');
+    expect(drillProgress('aws', 'dop', 'Q-1', false)).toEqual({ id: 'd-1', current: 'Q-1' });
+    expect(drillProgress('aws', 'dop', 'Q-1', true)).toEqual({ id: 'd-1', current: 'Q-2' });
+    // 最後の問題に答えたら続きを消す
+    expect(drillProgress('aws', 'dop', 'Q-2', true)).toEqual({ id: 'd-1', current: null });
+    expect(drillProgress('aws', 'dop', 'Q-9', true)).toBeNull();
+  });
+
+  it('問題マップから開いた並びでは続きを動かさない', () => {
+    startSession('aws', 'dop', ['Q-1', 'Q-2']);
+    expect(drillProgress('aws', 'dop', 'Q-1', true)).toBeNull();
   });
 });
