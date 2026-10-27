@@ -20,10 +20,16 @@ export function ExamPage() {
   const [order, setOrder] = useState<StudyOrder>('random');
   const [resetError, setResetError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  /** 番号順のときに、何番の問題から出すか（空なら最初から） */
+  const [from, setFrom] = useState('');
+  const fromNumber = order === 'sequential' ? Math.max(1, Math.trunc(Number(from)) || 1) : 1;
 
   const targets = useMemo(
-    () => data?.questions.filter((q) => FILTERS[filter].includes(q.mastery)).map((q) => q.id) ?? [],
-    [data, filter],
+    () =>
+      data?.questions
+        .filter((q) => FILTERS[filter].includes(q.mastery) && q.number >= fromNumber)
+        .map((q) => q.id) ?? [],
+    [data, filter, fromNumber],
   );
 
   if (error) return <ErrorMessage message={error} onRetry={reload} />;
@@ -135,6 +141,22 @@ export function ExamPage() {
               </button>
             ))}
           </div>
+          {order === 'sequential' && (
+            <label className="flex items-center gap-2 text-sm text-ink-2">
+              問
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={data.questions.length}
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                placeholder="1"
+                className="w-20 rounded-lg bg-surface px-2 py-1.5 text-right tabular-nums ring-1 ring-grid focus:outline-none focus:ring-accent"
+              />
+              から出題する
+            </label>
+          )}
         </div>
         <button
           onClick={() => void start()}
