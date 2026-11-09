@@ -39,6 +39,14 @@ export interface ExamSummary {
   questionCount: number;
 }
 
+/**
+ * カタログに載せる資格の情報。今ある問題番号の一覧を持ち、問題を消した後に残る履歴を
+ * 集計から外すのに使う。この項目より前にビルドしたカタログには無い
+ */
+export interface CatalogExam extends ExamSummary {
+  questionIds?: string[];
+}
+
 export interface CategorySummary {
   category: string;
   name: string;
@@ -50,7 +58,7 @@ export interface CategorySummary {
 /** 問題ビルドが出力するカタログ（questions/catalog.json） */
 export interface Catalog {
   generatedAt: string;
-  categories: CategorySummary[];
+  categories: (Omit<CategorySummary, 'exams'> & { exams: CatalogExam[] })[];
 }
 
 export type MasteryCounts = Record<Mastery, number>;

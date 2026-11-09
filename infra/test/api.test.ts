@@ -30,7 +30,7 @@ vi.mock('../lambda/api/questions', () => ({
         category: 'aws',
         name: 'AWS',
         order: 1,
-        exams: [{ category: 'aws', exam: 'dop-c02', name: 'DOP', order: 1, questionCount: 2 }],
+        exams: [{ category: 'aws', exam: 'dop-c02', name: 'DOP', order: 1, questionCount: 2, questionIds: ['Q-1', 'Q-2'] }],
       },
     ],
   }),
@@ -172,6 +172,16 @@ describe('API', () => {
   it('カタログは未回答数を問題数から数える', async () => {
     const { body } = await call(event('GET /catalog'));
     expect(body.categories[0].exams[0].mastery.unanswered).toBe(2);
+  });
+
+  it('カタログの集計には、削除された問題の履歴を数えない', async () => {
+    store.set('aws/dop-c02#Q-1', { qkey: 'aws/dop-c02#Q-1', history: [true], attempts: 1 });
+    store.set('aws/dop-c02#OLD-1', { qkey: 'aws/dop-c02#OLD-1', history: [false], attempts: 1 });
+    const { body } = await call(event('GET /catalog'));
+    const dop = body.categories[0].exams[0];
+    expect(dop.mastery.weak).toBe(0);
+    expect(dop.mastery.unanswered).toBe(1);
+    expect(dop).not.toHaveProperty('questionIds');
   });
 
   it('スケジュールからの温めの呼び出しでは、カタログにある資格の問題をすべて読み込んでおく', async () => {

@@ -91,13 +91,17 @@ async function getCatalog(userId: string): Promise<CatalogResponse> {
   return {
     categories: catalog.categories.map(({ exams, ...category }) => ({
       ...category,
-      exams: exams.map((exam) => {
+      exams: exams.map(({ questionIds, ...exam }) => {
         const prefix = examPrefix(exam.category, exam.exam);
+        // 問題を削除した後も履歴は残るため、今ある問題の履歴だけを数える
+        const ids = questionIds && new Set(questionIds);
         const mastery = emptyMasteryCounts();
         for (const item of items) {
-          if (item.qkey.startsWith(prefix)) mastery[masteryOf(item.history)]++;
+          if (!item.qkey.startsWith(prefix)) continue;
+          if (ids && !ids.has(item.qkey.slice(prefix.length))) continue;
+          mastery[masteryOf(item.history)]++;
         }
-        // 問題を削除した後も履歴は残るため、未回答数が負にならないよう丸める
+        // 問題番号の一覧が無い古いカタログでは消えた問題の履歴も数えるため、負にならないよう丸める
         const answered = mastery.mastered + mastery.shaky + mastery.weak;
         mastery.unanswered = Math.max(0, exam.questionCount - answered);
         return { ...exam, mastery };
