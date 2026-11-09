@@ -23,7 +23,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync,
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SLUG } from '../../../shared/ids';
-import type { Catalog, CategorySummary, ExamFile } from '../../../shared/types';
+import type { Catalog, ExamFile } from '../../../shared/types';
 import { parseQuestions } from './parse';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -64,7 +64,7 @@ const DIAGRAM_FILE = /^(.+)_選択肢(\d+)_(正解|不正解)\.drawio\.png$/;
 const collator = new Intl.Collator('ja', { numeric: true });
 
 export function buildQuestions(contentDir = CONTENT_DIR) {
-  const categories: CategorySummary[] = [];
+  const categories: Catalog['categories'] = [];
   const exams: ExamFile[] = [];
   const diagrams: { category: string; exam: string; id: string; choice: number; source: string }[] = [];
 
@@ -72,7 +72,7 @@ export function buildQuestions(contentDir = CONTENT_DIR) {
     const categoryDir = join(contentDir, category);
     assertSlug(category, categoryDir);
     const categoryMeta = readJson<CategoryMeta>(join(categoryDir, 'category.json'));
-    const summary: CategorySummary = {
+    const summary: Catalog['categories'][number] = {
       category,
       name: categoryMeta.name,
       description: categoryMeta.description,
@@ -128,6 +128,7 @@ export function buildQuestions(contentDir = CONTENT_DIR) {
         code: examMeta.code,
         order: examMeta.order ?? 100,
         questionCount: questions.length,
+        questionIds: questions.map((q) => q.id),
       });
     }
     summary.exams.sort((a, b) => a.order - b.order || a.exam.localeCompare(b.exam));
