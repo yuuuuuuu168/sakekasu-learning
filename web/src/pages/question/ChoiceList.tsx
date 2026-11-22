@@ -33,7 +33,7 @@ export function ChoiceList({
   onToggle: (original: number) => void;
 }) {
   return (
-    <div role={multi ? 'group' : 'radiogroup'} className="space-y-2.5">
+    <div role={multi ? 'group' : 'radiogroup'} className="space-y-3">
       {displayOrder.map((original, pos) => {
         const state = choiceState(original, selected, answers);
         return (
@@ -43,14 +43,14 @@ export function ChoiceList({
             aria-checked={selected.includes(original)}
             disabled={!!answers}
             onClick={() => onToggle(original)}
-            className={`flex w-full items-start gap-3 rounded-xl p-4 text-left ring-1 transition disabled:cursor-default ${STYLE[state].card}`}
+            className={`flex w-full items-start gap-3 rounded-xl p-4 text-left ring-1 transition-colors disabled:cursor-default ${STYLE[state].card}`}
           >
             <span
               className={`flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${STYLE[state].badge}`}
             >
               <Badge state={state} label={LABELS[pos]} />
             </span>
-            <span className="min-w-0 flex-1 whitespace-pre-wrap leading-relaxed">
+            <span className="min-w-0 flex-1 whitespace-pre-wrap leading-7">
               {answers && <span className="mr-1 font-semibold text-muted">{LABELS[pos]}.</span>}
               {choices[original]}
             </span>

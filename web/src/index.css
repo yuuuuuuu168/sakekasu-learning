@@ -28,6 +28,13 @@
 
   /* アクセントや正誤の色で塗った上の文字。ライトでは白、ダークでは夜色 */
   --color-on-fill: var(--sk-accent-ink);
+
+  /* 後ろを暗くする幕（チャットのパネル、図解の拡大）。ライトでもダークでも夜色 */
+  --color-scrim: var(--sk-night);
+
+  /* 動きの曲線は画面全体で 1 本にそろえる（ease-out。跳ねる動きは使わない） */
+  --default-transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* 解説の Markdown（typography）の色も共通テーマに合わせる。コードブロックは両モードで暗い地のまま */
@@ -46,6 +53,88 @@
   --tw-prose-code: var(--sk-ink);
   --tw-prose-th-borders: var(--sk-border);
   --tw-prose-td-borders: var(--sk-border);
+  --tw-prose-pre-bg: var(--sk-night);
+  --tw-prose-pre-code: #f2efe8;
+}
+
+/*
+ * 地の色と文字色は同じ規則で決める。文中の code は淡い地に濃い文字、コードブロックの中の code は
+ * 地を持たずにブロックの明るい文字を継ぐ（文中の code の淡い地が残ると、暗い地の上で白地に白文字になる）
+ */
+.prose-slate :where(code):not(:where(pre code)) {
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.25rem;
+  background: var(--sk-surface-2);
+  color: var(--sk-ink);
+  font-weight: 400;
+}
+.prose-slate :where(code):not(:where(pre code))::before,
+.prose-slate :where(code):not(:where(pre code))::after {
+  content: none;
+}
+.prose-slate pre {
+  border: 1px solid var(--sk-border);
+  background: var(--sk-night);
+  color: #f2efe8;
+}
+.prose-slate pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+/* AI の応答を流している間、本文の末尾にカーソルを出す（ChatPanel） */
+.chat-streaming .prose > :is(p, h1, h2, h3, h4, pre):last-child::after,
+.chat-streaming .prose > :is(ul, ol):last-child > li:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 0.125em;
+  vertical-align: -0.125em;
+  background: currentColor;
+  opacity: 0.6;
+  animation: chat-caret-loading 1s steps(1) infinite;
+}
+@keyframes chat-caret-loading {
+  50% {
+    opacity: 0;
+  }
+}
+
+/*
+ * 最初の文字が届くまでの「考え中」。光が左から右へ流れる程度の控えめな動き。
+ * 文字は単色のまま、マスクの濃淡だけを流す
+ */
+.chat-thinking {
+  display: inline-block;
+  color: var(--sk-ink-2);
+  -webkit-mask-image: linear-gradient(90deg, #00000066 35%, #000000 50%, #00000066 65%);
+  mask-image: linear-gradient(90deg, #00000066 35%, #000000 50%, #00000066 65%);
+  -webkit-mask-size: 300% 100%;
+  mask-size: 300% 100%;
+  animation: chat-thinking-shimmer 1.8s linear infinite;
+}
+@keyframes chat-thinking-shimmer {
+  from {
+    -webkit-mask-position: 100% 0;
+    mask-position: 100% 0;
+  }
+  to {
+    -webkit-mask-position: 0 0;
+    mask-position: 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-streaming .prose > :is(p, h1, h2, h3, h4, pre):last-child::after,
+  .chat-streaming .prose > :is(ul, ol):last-child > li:last-child::after,
+  .chat-thinking {
+    animation: none;
+  }
+  .chat-thinking {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
 }
 
 html {
@@ -53,6 +142,8 @@ html {
 }
 body {
   @apply antialiased;
+  /* 日本語の約物を詰める */
+  font-feature-settings: 'palt' 1;
 }
 
 /*

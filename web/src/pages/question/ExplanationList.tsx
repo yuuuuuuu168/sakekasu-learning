@@ -57,12 +57,13 @@ export function ExplanationList({
               aria-expanded={isOpen}
               className="flex w-full items-center gap-2 p-4 text-left"
             >
-              <span className={`rounded-md px-2 py-0.5 text-xs font-semibold text-on-fill ${correct ? 'bg-success' : 'bg-muted'}`}>
+              {/* 正誤は塗りの札にせず文字の色で。幅をそろえて「選択肢 A」の頭を 1 列に並べる */}
+              <span className={`w-12 shrink-0 text-sm font-semibold ${correct ? 'text-success' : 'text-muted'}`}>
                 {correct ? '正解' : '不正解'}
               </span>
               <span className="font-semibold">選択肢 {LABELS[pos]}</span>
               {selected.includes(original) && <span className="text-xs text-muted">（あなたの回答）</span>}
-              <ChevronDown className={`ml-auto size-5 shrink-0 text-muted transition ${isOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`ml-auto size-5 shrink-0 text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
             {isOpen && (
               <div className="space-y-3 border-t border-grid p-4">

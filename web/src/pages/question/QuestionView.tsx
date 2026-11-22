@@ -103,17 +103,12 @@ export function QuestionView({
 
       {/* scroll-mt はヘッダー（h-14 + 枠線）の下に少し余白を残す分 */}
       <article ref={articleRef} className="scroll-mt-16 space-y-4 rounded-2xl border border-grid bg-surface p-5 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-muted">
-            問{question.number}
-            <span className="font-normal text-muted"> / {question.total}</span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <span className="tabular-nums text-muted">
+            <span className="font-semibold text-ink-2">問{question.number}</span> / {question.total}
           </span>
           <MasteryChip mastery={(result?.progress ?? question.progress).mastery} />
-          {multi && (
-            <span className="rounded-full bg-accent-weak px-2 py-0.5 text-xs font-medium text-accent">
-              {question.selectCount} つ選択
-            </span>
-          )}
+          {multi && <span className="font-semibold text-accent">{question.selectCount} つ選択</span>}
         </div>
         <Markdown>{question.question}</Markdown>
       </article>
@@ -160,7 +155,7 @@ export function QuestionView({
 
       <button
         onClick={() => setChatOpen(true)}
-        className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-semibold text-on-fill shadow-lg hover:bg-ink-2"
+        className="fixed bottom-6 right-4 z-30 sm:right-6 flex items-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-semibold text-on-fill shadow-lg hover:bg-ink-2"
       >
         <MessageCircle className="size-5" />
         AI に相談

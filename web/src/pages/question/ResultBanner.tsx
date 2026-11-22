@@ -16,7 +16,7 @@ export function ResultBanner({
         {correct ? <Check className="size-5" /> : <X className="size-5" />}
       </span>
       <div>
-        <p className="font-bold">{correct ? '正解！' : '不正解'}</p>
+        <p className="font-bold">{correct ? '正解' : '不正解'}</p>
         <p className="text-sm">正解は {correctLabels(answers, displayOrder)}</p>
       </div>
     </div>
