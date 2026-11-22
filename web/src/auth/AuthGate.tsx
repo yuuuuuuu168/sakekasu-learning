@@ -180,7 +180,7 @@ function SignInScreen({ error, onSignIn }: { error: string | null; onSignIn: () 
   return (
     <main className="signin">
       <div className="signin-mark" aria-hidden="true">
-        📚
+        📚{/* check-ui-ignore: ポータル（sakekasu-integrated_environment の portal.ts）と共通のアプリの印 */}
       </div>
       <h1 className="signin-title">learning</h1>
       <div className="signin-rule" aria-hidden="true">

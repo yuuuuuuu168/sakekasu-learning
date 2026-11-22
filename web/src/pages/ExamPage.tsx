@@ -79,7 +79,7 @@ export function ExamPage() {
   };
 
   const option = (active: boolean) =>
-    `rounded-lg px-3 py-1.5 text-sm ring-1 transition ${
+    `rounded-lg px-3 py-1.5 text-sm ring-1 transition-colors ${
       active ? 'bg-accent text-on-fill ring-accent' : 'bg-surface text-ink-2 ring-grid hover:bg-plane'
     }`;
 
@@ -91,10 +91,11 @@ export function ExamPage() {
       </Link>
 
       <section className="space-y-4 rounded-2xl border border-grid bg-surface p-5 shadow-sm">
-        <div>
-          {data.exam.code && <p className="text-xs font-semibold tracking-wide text-accent">{data.exam.code}</p>}
+        <div className="space-y-1">
+          <p className="text-xs tabular-nums text-muted">
+            {data.exam.code && `${data.exam.code}・`}全 {data.questions.length} 問
+          </p>
           <h1 className="text-xl font-bold leading-snug">{data.exam.name}</h1>
-          <p className="text-sm text-muted">全 {data.questions.length} 問</p>
         </div>
         <MasteryBar counts={data.mastery} total={data.questions.length} />
       </section>
@@ -106,11 +107,10 @@ export function ExamPage() {
             <div className="text-sm">
               <p className="font-semibold">途中の演習があります</p>
               <p className="text-muted">
-                {FILTERS[drill.filter].label}・{ORDERS[drill.order]}　
+                {FILTERS[drill.filter].label}・{ORDERS[drill.order]}、
                 <span className="tabular-nums">
-                  {drill.queue.indexOf(drill.current) + 1} / {drill.queue.length}
-                </span>{' '}
-                問目から
+                  {drill.queue.length} 問中 {drill.queue.indexOf(drill.current) + 1} 問目から
+                </span>
               </p>
             </div>
             <button
@@ -123,20 +123,20 @@ export function ExamPage() {
           </div>
         )}
         <div className="space-y-2">
-          <p className="text-xs font-medium text-muted">出題する問題</p>
+          <p className="text-xs text-muted">出題する問題</p>
           <div className="flex flex-wrap gap-2">
             {(Object.keys(FILTERS) as StudyFilter[]).map((f) => (
-              <button key={f} className={option(filter === f)} onClick={() => setFilter(f)}>
+              <button key={f} className={option(filter === f)} aria-pressed={filter === f} onClick={() => setFilter(f)}>
                 {FILTERS[f].label}
               </button>
             ))}
           </div>
         </div>
         <div className="space-y-2">
-          <p className="text-xs font-medium text-muted">出題順</p>
+          <p className="text-xs text-muted">出題順</p>
           <div className="flex flex-wrap gap-2">
             {(Object.keys(ORDERS) as StudyOrder[]).map((o) => (
-              <button key={o} className={option(order === o)} onClick={() => setOrder(o)}>
+              <button key={o} className={option(order === o)} aria-pressed={order === o} onClick={() => setOrder(o)}>
                 {ORDERS[o]}
               </button>
             ))}
@@ -152,7 +152,7 @@ export function ExamPage() {
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
                 placeholder="1"
-                className="w-20 rounded-lg bg-surface px-2 py-1.5 text-right tabular-nums ring-1 ring-grid focus:outline-none focus:ring-accent"
+                className="w-20 rounded-lg bg-surface px-2 py-1.5 text-right text-base tabular-nums ring-1 ring-grid focus:outline-none focus:ring-accent sm:text-sm"
               />
               から出題する
             </label>

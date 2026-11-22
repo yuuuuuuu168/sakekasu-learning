@@ -30,22 +30,22 @@ export function HomePage() {
                 <Link
                   key={exam.exam}
                   to={`/exams/${exam.category}/${exam.exam}`}
-                  className="group flex flex-col gap-4 rounded-2xl border border-grid bg-surface p-5 shadow-sm transition hover:border-accent/50 hover:shadow"
+                  className="group flex flex-col gap-4 rounded-2xl border border-grid bg-surface p-5 shadow-sm transition-colors hover:border-accent/50"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       {exam.code && (
-                        <p className="text-xs font-semibold tracking-wide text-accent">{exam.code}</p>
+                        <p className="text-xs text-muted">{exam.code}</p>
                       )}
                       <h3 className="font-semibold leading-snug">{exam.name}</h3>
                     </div>
-                    <ChevronRight className="size-5 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-accent" />
+                    <ChevronRight className="size-5 shrink-0 text-muted transition-colors group-hover:text-accent" />
                   </div>
                   <div className="space-y-2">
                     {exam.drill && (
                       <p className="text-xs font-semibold text-accent">途中の演習があります</p>
                     )}
-                    <p className="text-xs text-muted">
+                    <p className="text-xs tabular-nums text-muted">
                       回答済み <span className="font-semibold text-ink-2">{answered}</span> / {exam.questionCount} 問
                     </p>
                     <MasteryBar counts={exam.mastery} total={exam.questionCount} />

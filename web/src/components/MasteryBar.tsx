@@ -35,11 +35,12 @@ export function MasteryLegend({ counts }: { counts: Record<Mastery, number> }) {
   );
 }
 
+/** 1 問の習熟度。凡例と同じ「小さな丸 + 文字」で示す（色付きの札にしない） */
 export function MasteryChip({ mastery }: { mastery: Mastery }) {
   const ui = MASTERY_UI[mastery];
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${ui.chip}`}>
-      <span className={`size-1.5 rounded-full ${ui.dot}`} />
+    <span className="inline-flex items-center gap-1.5 text-sm text-ink-2" title={ui.description}>
+      <span className={`size-2.5 rounded-full ${ui.dot}`} />
       {ui.label}
     </span>
   );

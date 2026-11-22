@@ -34,7 +34,7 @@ export function NextActions({
         </button>
       ) : (
         <Link to={examPath} className={primary}>
-          {inSession ? 'おつかれさまでした！一覧へ戻る' : '問題一覧へ'}
+          {inSession ? '演習を終えて一覧へ戻る' : '問題一覧へ'}
         </Link>
       )}
     </div>

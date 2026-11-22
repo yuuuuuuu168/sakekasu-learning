@@ -4,7 +4,8 @@ import remarkGfm from 'remark-gfm';
 export function Markdown({ children, className = '' }: { children: string; className?: string }) {
   return (
     <div
-      className={`prose prose-slate max-w-none prose-p:leading-relaxed prose-code:rounded prose-code:bg-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-none prose-code:after:content-none prose-pre:bg-slate-900 ${className}`}
+      // code とコードブロックの地と文字色は index.css の .prose-slate でまとめて決める
+      className={`prose prose-slate max-w-none ${className}`}
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}

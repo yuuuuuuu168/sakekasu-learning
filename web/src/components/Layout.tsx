@@ -7,9 +7,9 @@ export function Layout() {
   const { signOut } = useAuth();
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-grid bg-surface/90 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-grid bg-surface">
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-3 px-4">
-          <Link to="/" className="flex items-center gap-2 font-bold tracking-tight">
+          <Link to="/" className="flex items-center gap-2 font-bold">
             <span className="flex size-8 items-center justify-center rounded-lg bg-accent text-on-fill">
               <GraduationCap className="size-5" />
             </span>
