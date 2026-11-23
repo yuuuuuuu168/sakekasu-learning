@@ -1,10 +1,11 @@
-import { ArrowLeft, Play, RotateCcw, StepForward } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, Play, RotateCcw, StepForward } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { QuestionListResponse } from '../../../shared/types';
 import { MasteryBar } from '../components/MasteryBar';
 import { ErrorMessage, Loading } from '../components/Status';
 import { api } from '../lib/api';
+import { archivedDate } from '../lib/archive';
 import { shuffledOrder } from '../lib/choices';
 import { MASTERY_UI } from '../lib/mastery-ui';
 import { useApiResource } from '../lib/useApiResource';
@@ -20,6 +21,8 @@ export function ExamPage() {
   const [order, setOrder] = useState<StudyOrder>('random');
   const [resetError, setResetError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
   /** 番号順のときに、何番の問題から出すか（空なら最初から） */
   const [from, setFrom] = useState('');
   const fromNumber = order === 'sequential' ? Math.max(1, Math.trunc(Number(from)) || 1) : 1;
@@ -78,6 +81,26 @@ export function ExamPage() {
     }
   };
 
+  const toggleArchive = async () => {
+    const archive = !data.archivedAt;
+    if (
+      archive &&
+      !window.confirm(`${data.exam.name} をアーカイブします。資格一覧の下にまとめて表示します。回答履歴は残ります。`)
+    ) {
+      return;
+    }
+    setArchiveError(null);
+    setArchiving(true);
+    try {
+      await (archive ? api.archive(category, exam) : api.unarchive(category, exam));
+      reload();
+    } catch (err) {
+      setArchiveError((err as Error).message);
+    } finally {
+      setArchiving(false);
+    }
+  };
+
   const option = (active: boolean) =>
     `rounded-lg px-3 py-1.5 text-sm ring-1 transition-colors ${
       active ? 'bg-accent text-on-fill ring-accent' : 'bg-surface text-ink-2 ring-grid hover:bg-plane'
@@ -91,12 +114,42 @@ export function ExamPage() {
       </Link>
 
       <section className="space-y-4 rounded-2xl border border-grid bg-surface p-5 shadow-sm">
-        <div className="space-y-1">
-          <p className="text-xs tabular-nums text-muted">
-            {data.exam.code && `${data.exam.code}・`}全 {data.questions.length} 問
-          </p>
-          <h1 className="text-xl font-bold leading-snug">{data.exam.name}</h1>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <p className="text-xs tabular-nums text-muted">
+              {data.exam.code && `${data.exam.code}・`}全 {data.questions.length} 問
+            </p>
+            <h1 className="text-xl font-bold leading-snug">{data.exam.name}</h1>
+          </div>
+          {!data.archivedAt && (
+            <button
+              onClick={() => void toggleArchive()}
+              disabled={archiving}
+              className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-muted hover:bg-plane hover:text-ink disabled:opacity-40"
+            >
+              <Archive className="size-3.5" />
+              アーカイブ
+            </button>
+          )}
         </div>
+        {data.archivedAt && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-plane px-4 py-3">
+            <p className="text-sm tabular-nums text-ink-2">{archivedDate(data.archivedAt)} にアーカイブしました</p>
+            <button
+              onClick={() => void toggleArchive()}
+              disabled={archiving}
+              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-ink-2 ring-1 ring-grid hover:bg-surface disabled:opacity-40"
+            >
+              <ArchiveRestore className="size-3.5" />
+              アーカイブから戻す
+            </button>
+          </div>
+        )}
+        {archiveError && (
+          <p role="alert" className="text-xs text-danger">
+            {archiveError}
+          </p>
+        )}
         <MasteryBar counts={data.mastery} total={data.questions.length} />
       </section>
 

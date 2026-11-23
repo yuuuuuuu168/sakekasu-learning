@@ -6,6 +6,9 @@
  *
  * 同じテーブルに、演習の続きも資格ごとに 1 アイテム置く（SK="drill#<category>/<exam>"）。
  * 回答履歴の SK（"<category>/<exam>#..."）とは前方一致しないので、履歴の集計やリセットには混ざらない。
+ *
+ * 合格してしまった資格のアーカイブも同じく資格ごとに 1 アイテム置く（SK="archive#<category>/<exam>"）。
+ * 回答履歴とは別のアイテムなので、アーカイブしても戻しても履歴はそのまま残る。
  */
 import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
@@ -30,10 +33,13 @@ interface ProgressItem {
   history: boolean[];
   attempts: number;
   lastAnsweredAt?: string;
+  /** アーカイブのアイテム（SK="archive#..."）だけが持つ */
+  archivedAt?: string;
 }
 
 export const examPrefix = (category: string, exam: string) => `${category}/${exam}#`;
 export const drillKey = (category: string, exam: string) => `drill#${category}/${exam}`;
+export const archiveKey = (category: string, exam: string) => `archive#${category}/${exam}`;
 
 export function toProgress(id: string, item?: Pick<ProgressItem, 'history' | 'attempts' | 'lastAnsweredAt'>): QuestionProgress {
   const history = item?.history ?? [];
@@ -57,7 +63,7 @@ async function queryAll(userId: string, prefix?: string): Promise<ProgressItem[]
           ? 'userId = :u AND begins_with(qkey, :p)'
           : 'userId = :u',
         ExpressionAttributeValues: prefix ? { ':u': userId, ':p': prefix } : { ':u': userId },
-        ProjectionExpression: 'qkey, history, attempts, lastAnsweredAt',
+        ProjectionExpression: 'qkey, history, attempts, lastAnsweredAt, archivedAt',
         ExclusiveStartKey: startKey,
       }),
     );
@@ -204,4 +210,33 @@ export async function updateDrill(
     if (err instanceof ConditionalCheckFailedException) return false;
     throw err;
   }
+}
+
+/** アーカイブした日時。アーカイブしていなければ null */
+export async function getArchive(userId: string, category: string, exam: string): Promise<string | null> {
+  const res = await ddb.send(
+    new GetCommand({ TableName: TABLE, Key: { userId, qkey: archiveKey(category, exam) } }),
+  );
+  return (res.Item?.archivedAt as string | undefined) ?? null;
+}
+
+/** 資格をアーカイブする。アーカイブ済みなら最初の日時を残して、その日時を返す */
+export async function putArchive(userId: string, category: string, exam: string): Promise<string> {
+  const res = await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE,
+      Key: { userId, qkey: archiveKey(category, exam) },
+      UpdateExpression: 'SET archivedAt = if_not_exists(archivedAt, :now)',
+      ExpressionAttributeValues: { ':now': new Date().toISOString() },
+      ReturnValues: 'ALL_NEW',
+    }),
+  );
+  return res.Attributes!.archivedAt as string;
+}
+
+/** アーカイブから戻す（アーカイブしていなくてもエラーにしない） */
+export async function deleteArchive(userId: string, category: string, exam: string): Promise<void> {
+  await ddb.send(
+    new DeleteCommand({ TableName: TABLE, Key: { userId, qkey: archiveKey(category, exam) } }),
+  );
 }

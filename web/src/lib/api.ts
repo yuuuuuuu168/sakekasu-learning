@@ -2,6 +2,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import type {
   AnswerResponse,
   ApiErrorResponse,
+  ArchiveResponse,
   CatalogResponse,
   DiagramResponse,
   QuestionDetailResponse,
@@ -89,4 +90,8 @@ export const api = {
     request<StartDrillResponse>('PUT', `${examPath(category, exam)}/drill`, body),
   updateDrill: (category: string, exam: string, body: UpdateDrillRequest) =>
     request<UpdateDrillResponse>('PATCH', `${examPath(category, exam)}/drill`, body),
+  archive: (category: string, exam: string) =>
+    request<ArchiveResponse>('PUT', `${examPath(category, exam)}/archive`),
+  unarchive: (category: string, exam: string) =>
+    request<ArchiveResponse>('DELETE', `${examPath(category, exam)}/archive`),
 };
