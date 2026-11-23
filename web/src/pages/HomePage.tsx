@@ -4,6 +4,7 @@ import type { CatalogResponse } from '../../../shared/types';
 import { MasteryBar } from '../components/MasteryBar';
 import { ErrorMessage, Loading } from '../components/Status';
 import { api } from '../lib/api';
+import { archivedDate, splitArchived } from '../lib/archive';
 import { useApiResource } from '../lib/useApiResource';
 
 export function HomePage() {
@@ -15,9 +16,11 @@ export function HomePage() {
     return <p className="py-20 text-center text-muted">まだ問題が登録されていません</p>;
   }
 
+  const { active, archived } = splitArchived(data.categories);
+
   return (
     <div className="space-y-10">
-      {data.categories.map((category) => (
+      {active.map((category) => (
         <section key={category.category} className="space-y-3">
           <div>
             <h2 className="text-lg font-bold">{category.name}</h2>
@@ -56,6 +59,33 @@ export function HomePage() {
           </div>
         </section>
       ))}
+
+      {archived.length > 0 && (
+        <details className="group/archive space-y-3" open={active.length === 0}>
+          <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-ink-2 hover:text-ink [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="size-4 transition-transform group-open/archive:rotate-90" />
+            アーカイブ <span className="font-normal tabular-nums text-muted">{archived.length} 件</span>
+          </summary>
+          <ul className="divide-y divide-grid rounded-2xl border border-grid bg-surface">
+            {archived.map((exam) => (
+              <li key={`${exam.category}/${exam.exam}`}>
+                <Link
+                  to={`/exams/${exam.category}/${exam.exam}`}
+                  className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-plane"
+                >
+                  <div className="min-w-0">
+                    {exam.code && <p className="text-xs text-muted">{exam.code}</p>}
+                    <p className="text-sm text-ink-2">{exam.name}</p>
+                  </div>
+                  <span className="shrink-0 text-xs tabular-nums text-muted">
+                    {archivedDate(exam.archivedAt!)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }

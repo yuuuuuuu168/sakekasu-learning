@@ -73,6 +73,8 @@ export interface CatalogResponse {
       mastery: MasteryCounts;
       /** 続きから再開できる演習があるか */
       drill: boolean;
+      /** アーカイブした日時。アーカイブしていなければ null */
+      archivedAt: string | null;
     })[];
   })[];
 }
@@ -100,6 +102,8 @@ export interface QuestionListResponse {
   questions: (QuestionProgress & { number: QuestionNumber })[];
   /** 続きから再開できる演習。無ければ null */
   drill: Drill | null;
+  /** アーカイブした日時。アーカイブしていなければ null */
+  archivedAt: string | null;
 }
 
 /**
@@ -180,6 +184,15 @@ export interface DiagramResponse {
 export interface ResetProgressResponse {
   /** 消した問題の数 */
   deleted: number;
+}
+
+/**
+ * PUT / DELETE /exams/{category}/{exam}/archive のレスポンス。
+ * 合格した資格を資格一覧の下にしまう（PUT）・戻す（DELETE）。ユーザーごとに持ち、回答履歴は消さない
+ */
+export interface ArchiveResponse {
+  /** アーカイブした日時。戻したら null */
+  archivedAt: string | null;
 }
 
 /** API が 4xx / 5xx で返す本文 */

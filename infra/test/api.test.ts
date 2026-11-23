@@ -15,6 +15,7 @@ const exam: ExamFile = {
 
 const store = new Map<string, { history: boolean[]; attempts: number; qkey: string }>();
 const drills = new Map<string, Drill>();
+const archives = new Map<string, string>();
 
 /** 次の recordAnswer で投げる例外（競合の再現用） */
 let recordError: Error | null = null;
@@ -41,9 +42,18 @@ vi.mock('../lambda/api/progress', async () => {
   const { masteryOf } = await import('../../shared/mastery');
   const prefix = (c: string, e: string) => `${c}/${e}#`;
   const drillKey = (c: string, e: string) => `drill#${c}/${e}`;
+  const archiveKey = (c: string, e: string) => `archive#${c}/${e}`;
   return {
     examPrefix: prefix,
     drillKey,
+    archiveKey,
+    getArchive: async (_u: string, c: string, e: string) => archives.get(archiveKey(c, e)) ?? null,
+    putArchive: async (_u: string, c: string, e: string) => {
+      const key = archiveKey(c, e);
+      if (!archives.has(key)) archives.set(key, '2026-11-23T00:00:00.000Z');
+      return archives.get(key)!;
+    },
+    deleteArchive: async (_u: string, c: string, e: string) => void archives.delete(archiveKey(c, e)),
     getDrill: async (_u: string, c: string, e: string) => drills.get(drillKey(c, e)),
     putDrill: async (_u: string, c: string, e: string, drill: Drill) => void drills.set(drillKey(c, e), drill),
     updateDrill: async (_u: string, c: string, e: string, id: string, current: string | null) => {
@@ -60,7 +70,11 @@ vi.mock('../lambda/api/progress', async () => {
       history: item?.history ?? [],
     }),
     getProgress: async (_u: string, c: string, e: string, id: string) => store.get(`${prefix(c, e)}${id}`),
-    listAllProgress: async () => [...store.values(), ...[...drills.keys()].map((qkey) => ({ qkey }))],
+    listAllProgress: async () => [
+      ...store.values(),
+      ...[...drills.keys()].map((qkey) => ({ qkey })),
+      ...[...archives].map(([qkey, archivedAt]) => ({ qkey, archivedAt })),
+    ],
     listExamProgress: async (_u: string, c: string, e: string) =>
       new Map([...store.values()].map((v) => [v.qkey.slice(prefix(c, e).length), v])),
     recordAnswer: async (_u: string, c: string, e: string, id: string, correct: boolean) => {
@@ -103,6 +117,7 @@ describe('API', () => {
   beforeEach(() => {
     store.clear();
     drills.clear();
+    archives.clear();
   });
 
   it('sub が無ければ 401', async () => {
@@ -257,6 +272,38 @@ describe('API', () => {
         expect((await call(event(route('PATCH'), examPath, body))).status).toBe(400);
       }
       expect(drills.size).toBe(0);
+    });
+  });
+
+  describe('アーカイブ', () => {
+    const route = (method: string) => `${method} /exams/{category}/{exam}/archive`;
+    const examPath = { category: 'aws', exam: 'dop-c02' };
+
+    it('アーカイブした日時をカタログと問題一覧で返し、戻すと null に戻る。回答履歴は消さない', async () => {
+      await call(event('POST /exams/{category}/{exam}/questions/{id}/answer', q('Q-1'), { selected: [2] }));
+      const catalogBefore = await call(event('GET /catalog'));
+      expect(catalogBefore.body.categories[0].exams[0].archivedAt).toBeNull();
+
+      const archived = await call(event(route('PUT'), examPath));
+      expect(archived).toEqual({ status: 200, body: { archivedAt: '2026-11-23T00:00:00.000Z' } });
+      const catalog = await call(event('GET /catalog'));
+      expect(catalog.body.categories[0].exams[0]).toMatchObject({
+        archivedAt: '2026-11-23T00:00:00.000Z',
+        mastery: { shaky: 1, unanswered: 1 },
+      });
+      const list = await call(event('GET /exams/{category}/{exam}/questions', examPath));
+      expect(list.body.archivedAt).toBe('2026-11-23T00:00:00.000Z');
+
+      const restored = await call(event(route('DELETE'), examPath));
+      expect(restored).toEqual({ status: 200, body: { archivedAt: null } });
+      expect((await call(event('GET /exams/{category}/{exam}/questions', examPath))).body.archivedAt).toBeNull();
+      expect(store.size).toBe(1);
+    });
+
+    it('存在しない資格はアーカイブできない', async () => {
+      expect((await call(event(route('PUT'), { category: 'aws', exam: 'nope' }))).status).toBe(404);
+      expect((await call(event(route('PUT'), { category: 'AWS!', exam: 'dop-c02' }))).status).toBe(400);
+      expect(archives.size).toBe(0);
     });
   });
 });

@@ -9,6 +9,8 @@
  * DELETE /exams/{category}/{exam}/progress               資格1つ分の履歴を消す
  * PUT    /exams/{category}/{exam}/drill                  演習を始め、続きを残す
  * PATCH  /exams/{category}/{exam}/drill                  演習をどこまで進めたかを残す
+ * PUT    /exams/{category}/{exam}/archive                合格した資格をアーカイブする（履歴は残す）
+ * DELETE /exams/{category}/{exam}/archive                アーカイブから戻す
  *
  * API とは別に、EventBridge のスケジュールから { warmup: true } で数分おきに呼ばれる。
  * 1 問を考えている間に実行環境が回収され、「回答する」がコールドスタートと問題 JSON の
@@ -27,6 +29,7 @@ import { randomUUID } from 'node:crypto';
 import { DRILL_FILTERS, DRILL_ORDERS } from '../../../shared/drill';
 import type {
   AnswerRequest,
+  ArchiveResponse,
   AnswerResponse,
   ApiErrorResponse,
   CatalogResponse,
@@ -43,12 +46,16 @@ import type {
 } from '../../../shared/types';
 import { HttpError } from './http-error';
 import {
+  archiveKey,
+  deleteArchive,
   drillKey,
   examPrefix,
+  getArchive,
   getDrill,
   getProgress,
   listAllProgress,
   listExamProgress,
+  putArchive,
   putDrill,
   recordAnswer,
   resetExamProgress,
@@ -119,7 +126,8 @@ async function getCatalog(userId: string): Promise<CatalogResponse> {
         const answered = mastery.mastered + mastery.shaky + mastery.weak;
         mastery.unanswered = Math.max(0, exam.questionCount - answered);
         const drill = items.some((item) => item.qkey === drillKey(exam.category, exam.exam));
-        return { ...exam, mastery, drill };
+        const archive = items.find((item) => item.qkey === archiveKey(exam.category, exam.exam));
+        return { ...exam, mastery, drill, archivedAt: archive?.archivedAt ?? null };
       }),
     })),
   };
@@ -127,10 +135,11 @@ async function getCatalog(userId: string): Promise<CatalogResponse> {
 
 async function getQuestionList(event: Event, userId: string): Promise<QuestionListResponse> {
   const { category, exam, file } = await requireExam(event);
-  const [catalog, progressMap, drill] = await Promise.all([
+  const [catalog, progressMap, drill, archivedAt] = await Promise.all([
     loadCatalog(),
     listExamProgress(userId, category, exam),
     getDrill(userId, category, exam),
+    getArchive(userId, category, exam),
   ]);
   const summary = catalog.categories
     .find((c) => c.category === category)
@@ -149,7 +158,7 @@ async function getQuestionList(event: Event, userId: string): Promise<QuestionLi
     mastery[progress.mastery]++;
     return { ...progress, number: i + 1 };
   });
-  return { exam: summary, mastery, questions, drill: resumableDrill(drill, file) };
+  return { exam: summary, mastery, questions, drill: resumableDrill(drill, file), archivedAt };
 }
 
 /**
@@ -309,6 +318,17 @@ async function route(event: Event): Promise<APIGatewayProxyResultV2> {
         return json(200, await startDrill(event, userId));
       case 'PATCH /exams/{category}/{exam}/drill':
         return json(200, await patchDrill(event, userId));
+      case 'PUT /exams/{category}/{exam}/archive': {
+        const { category, exam } = await requireExam(event);
+        const res: ArchiveResponse = { archivedAt: await putArchive(userId, category, exam) };
+        return json(200, res);
+      }
+      case 'DELETE /exams/{category}/{exam}/archive': {
+        const { category, exam } = await requireExam(event);
+        await deleteArchive(userId, category, exam);
+        const res: ArchiveResponse = { archivedAt: null };
+        return json(200, res);
+      }
       default:
         return errorJson(404, 'not found');
     }

@@ -153,6 +153,8 @@ export class BackendStack extends Stack {
       ['/exams/{category}/{exam}/progress', apigw.HttpMethod.DELETE],
       ['/exams/{category}/{exam}/drill', apigw.HttpMethod.PUT],
       ['/exams/{category}/{exam}/drill', apigw.HttpMethod.PATCH],
+      ['/exams/{category}/{exam}/archive', apigw.HttpMethod.PUT],
+      ['/exams/{category}/{exam}/archive', apigw.HttpMethod.DELETE],
     ];
     for (const [routePath, method] of routes) {
       this.httpApi.addRoutes({ path: routePath, methods: [method], integration });

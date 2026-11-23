@@ -10,7 +10,7 @@ vi.mock('@aws-sdk/lib-dynamodb', async (importOriginal) => {
 });
 
 process.env.PROGRESS_TABLE_NAME = 'progress';
-const { recordAnswer, resetExamProgress, updateDrill } = await import('../lambda/api/progress');
+const { putArchive, recordAnswer, resetExamProgress, updateDrill } = await import('../lambda/api/progress');
 const { HttpError } = await import('../lambda/api/http-error');
 
 const conflict = () => new ConditionalCheckFailedException({ message: 'conflict', $metadata: {} });
@@ -133,5 +133,15 @@ describe('updateDrill', () => {
     expect(await updateDrill('u', 'aws', 'dop-c02', 'old', 'Q-2')).toBe(false);
     send.mockRejectedValueOnce(new Error('boom'));
     await expect(updateDrill('u', 'aws', 'dop-c02', 'd-1', 'Q-2')).rejects.toThrow('boom');
+  });
+});
+
+describe('putArchive', () => {
+  it('アーカイブ済みなら最初の日時を残す', async () => {
+    send.mockResolvedValue({ Attributes: { archivedAt: '2026-01-01T00:00:00.000Z' } });
+    expect(await putArchive('u', 'aws', 'dop-c02')).toBe('2026-01-01T00:00:00.000Z');
+    const update = send.mock.calls[0][0] as UpdateCommand;
+    expect(update.input.Key).toEqual({ userId: 'u', qkey: 'archive#aws/dop-c02' });
+    expect(update.input.UpdateExpression).toBe('SET archivedAt = if_not_exists(archivedAt, :now)');
   });
 });
