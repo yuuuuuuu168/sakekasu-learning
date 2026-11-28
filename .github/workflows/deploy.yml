@@ -32,9 +32,10 @@ concurrency:
 
 env:
   ENV_NAME: dev
-  AWS_ACCOUNT_ID: '232791540685'
+  # アカウント ID はリポジトリに書かず、secrets.AWS_ACCOUNT_ID から組み立てる（公開リポジトリなので）
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
   # cdkd はこのロールに切り替えてから AWS を操作する（deploy ロール自身には強い権限を持たせない）
-  CDKD_ROLE_ARN: arn:aws:iam::232791540685:role/sakekasu-learning-cdkd-deploy
+  CDKD_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/sakekasu-learning-cdkd-deploy
 
 jobs:
   build:
@@ -124,7 +125,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: arn:aws:iam::232791540685:role/sakekasu-learning-github-actions-deploy
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/sakekasu-learning-github-actions-deploy
           aws-region: ap-northeast-1
 
       - name: cdkd deploy

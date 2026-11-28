@@ -19,7 +19,7 @@ dev については 2026-10-11 に済んでいる（ID は `infra/cdk.json` の 
    `sts:GetWebIdentityToken` を許したロールしかトークンを取れないので、ほかのアプリには影響しない
 2. Claude Console: ワークスペース `sakekasu-learning` を作る（使用量・コスト・利用上限をアプリ別に分ける）
 3. Claude Console: Settings → Workload identity で、上の発行者に次を足す
-   - ルール `sakekasu-learning-workload`: IAM ロール ARN `arn:aws:iam::232791540685:role/sakekasu-learning-dev-agent-runtime`、
+   - ルール `sakekasu-learning-workload`: IAM ロール ARN `arn:aws:iam::<アプリのアカウント ID>:role/sakekasu-learning-dev-agent-runtime`、
      audience `https://api.anthropic.com`、ワークスペース `sakekasu-learning`、スコープ `workspace:developer`、寿命 600 秒
    - サービスアカウント `sakekasu-learning-chat`
 4. Claude Console: Settings → Service accounts で `sakekasu-learning-chat` を開き、「ワークスペースに追加」で
